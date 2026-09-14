@@ -204,7 +204,10 @@ funkcionalnosti scene donesene su i provjerene od strane autora.
 
 ## Licenca
 
-Projekt je izrađen u sklopu kolegija 3D računalna grafika (FPMOI Osijek) u
-obrazovne svrhe. 3D model ribarskog broda i zvučni efekti (ako se koriste u
-popratnim materijalima) preuzeti su s Fab.com / Pixabay pod njihovim uvjetima
-licenciranja - vidi seminarski rad za potpune izvore.
+## Licenca
+
+Projekt je izrađen u sklopu kolegija 3D računalna grafika u
+obrazovne svrhe. Sva geometrija, teksture i zvučni efekti izrađeni su
+samostalno (proceduralno u Blenderu i generirani Python skriptama u
+`tools/`) - projekt ne koristi vanjske 3D modele niti preuzete zvučne
+efekte.
