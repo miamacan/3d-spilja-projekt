@@ -1,0 +1,13 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/env/cave_env_T_Limestone_BC.png" id="1_ea6bw"]
+[ext_resource type="Texture2D" path="res://assets/env/cave_env_T_Limestone_ORM.png" id="2_v571s"]
+
+[resource]
+albedo_texture = ExtResource("1_ea6bw")
+roughness_texture = ExtResource("2_v571s")
+roughness_texture_channel = 1
+ao_enabled = true
+ao_texture = ExtResource("2_v571s")
+uv1_scale = Vector3(3, 3, 3)
+uv1_triplanar = true

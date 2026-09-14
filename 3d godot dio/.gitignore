@@ -1,0 +1,18 @@
+# Godot 4+ editor cache — regenerated on open, never commit
+.godot/
+/new-game-project/android/
+
+# regenerable import by-products (the .import files themselves DO get committed:
+# they carry the resource uid, and dropping them breaks every scene reference)
+*.unwrap_cache
+*.translation
+
+# OS / editor scratch
+*.tmp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# pre-promote rollback copies written by the g*_*.gd builders;
+# kept on disk for a one-step undo, but git history supersedes them
+*.tscn.prev

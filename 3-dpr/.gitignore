@@ -1,0 +1,22 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Blender
+*.blend1
+*.blend2
+*.blend@
+/blender/_backup/
+
+# scratch
+/_to_delete/
+
+# regenerable Blender intermediates (SDF meshes, check renders)
+/blender/_src/
+
+# desktop app scratch + per-phase blend snapshots (cave.blend history covers these)
+Claude outputs/
+/blender/cave_B*.blend
+
+# python bytecode from running tools/*.py inside Blender
+__pycache__/

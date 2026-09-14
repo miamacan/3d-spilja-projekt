@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/rock/rock.gd" id="1_36ecm"]
+[ext_resource type="Material" path="res://scenes/rock/M_RockPebble.tres" id="2_ga7ox"]
+[ext_resource type="ArrayMesh" path="res://scenes/rock/rock_mesh_1.res" id="3_6uhyu"]
+[ext_resource type="AudioStream" path="res://audio/stone_click_1.wav" id="4_g3spq"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_3yqg1"]
+friction = 0.7
+bounce = 0.32
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_fmd1n"]
+radius = 0.06
+
+[node name="Rock" type="RigidBody3D" unique_id=945580695 groups=["rock"]]
+collision_layer = 4
+collision_mask = 5
+mass = 0.3
+physics_material_override = SubResource("PhysicsMaterial_3yqg1")
+continuous_cd = true
+contact_monitor = true
+max_contacts_reported = 4
+script = ExtResource("1_36ecm")
+
+[node name="Col" type="CollisionShape3D" parent="." unique_id=1522899862]
+shape = SubResource("SphereShape3D_fmd1n")
+
+[node name="Mesh" type="MeshInstance3D" parent="." unique_id=67990386]
+material_override = ExtResource("2_ga7ox")
+mesh = ExtResource("3_6uhyu")
+
+[node name="Audio" type="AudioStreamPlayer3D" parent="." unique_id=1813062992]
+stream = ExtResource("4_g3spq")
+unit_size = 4.0
+max_distance = 40.0

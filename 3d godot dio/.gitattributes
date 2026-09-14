@@ -1,0 +1,16 @@
+# Godot text resources — keep diffs readable and line endings stable
+*.gd     text eol=lf diff=python
+*.tscn   text eol=lf -merge
+*.tres   text eol=lf -merge
+*.import text eol=lf
+*.godot  text eol=lf
+*.cfg    text eol=lf
+*.md     text eol=lf
+
+# Binary art assets. Uncomment the filter/diff/merge columns after
+# `git lfs install` if the .glb re-exports start bloating history.
+*.glb  binary
+*.png  binary
+*.jpg  binary
+*.ogg  binary
+*.wav  binary

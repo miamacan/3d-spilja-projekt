@@ -1,0 +1,28 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/water/water.gd" id="1_dluw5"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_dluw5"]
+size = Vector3(31, 4.963566, 26.5)
+
+[node name="Water" type="Node3D" unique_id=1445783875]
+script = ExtResource("1_dluw5")
+
+[node name="Volume" type="Area3D" parent="." unique_id=91964756]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, -2.481783, -1.25)
+collision_layer = 0
+collision_mask = 4
+monitorable = false
+
+[node name="Shape" type="CollisionShape3D" parent="Volume" unique_id=1911540409]
+shape = SubResource("BoxShape3D_dluw5")
+
+[node name="Probe" type="ReflectionProbe" parent="." unique_id=2142640147]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4944997, 12.9175, 2.6915002)
+size = Vector3(31.278301, 36.1233, 37.34934)
+origin_offset = Vector3(0, -11.4175, 0)
+interior = true
+reflection_mask = 2
+ambient_mode = 0
+
+[node name="Splashes" type="Node3D" parent="." unique_id=488355958]

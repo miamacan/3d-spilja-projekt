@@ -1,0 +1,130 @@
+[gd_scene format=3 uid="uid://155xx7s6y6ta"]
+
+[ext_resource type="Environment" uid="uid://d4nk2b8ihut2i" path="res://assets/env/cave_environment.tres" id="1_jy1fe"]
+[ext_resource type="PackedScene" uid="uid://cwxnkkkpfrvyq" path="res://assets/env/cave_env.glb" id="2_a7yhm"]
+[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="3_ejfwp"]
+[ext_resource type="PackedScene" path="res://scenes/water/Water.tscn" id="4_hr8ny"]
+[ext_resource type="PackedScene" path="res://scenes/fx/Motes.tscn" id="5_x3q4g"]
+[ext_resource type="Texture2D" uid="uid://dct70n2xl1mdc" path="res://assets/textures/T_Mote.png" id="6_25oi4"]
+[ext_resource type="Script" uid="uid://bxr4k56e6vvit" path="res://scenes/fx/drips.gd" id="7_1bjhi"]
+[ext_resource type="Script" uid="uid://5qev02t3ayve" path="res://scenes/debug/route_audit.gd" id="8_w00hp"]
+[ext_resource type="Script" uid="uid://blkruu7otnx67" path="res://scenes/debug/hero_cam.gd" id="9_8sme1"]
+[ext_resource type="Script" uid="uid://ieuuxqny2xkj" path="res://scenes/env/foliage.gd" id="10_ygdbv"]
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_4csxf"]
+
+[sub_resource type="FogMaterial" id="FogMaterial_j4qc6"]
+density = 0.06
+albedo = Color(0.45, 0.68, 0.66, 1)
+height_falloff = 0.35
+edge_fade = 0.25
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_d4drx"]
+emission_shape = 3
+emission_box_extents = Vector3(3, 3, 17)
+direction = Vector3(0, 1, 0)
+spread = 180.0
+initial_velocity_min = 0.02
+initial_velocity_max = 0.1
+gravity = Vector3(0, -0.035, 0)
+scale_min = 0.5
+scale_max = 1.6
+color = Color(1, 0.97, 0.9, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5tleu"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1, 0.97, 0.9, 0.5)
+albedo_texture = ExtResource("6_25oi4")
+disable_receive_shadows = true
+billboard_mode = 1
+billboard_keep_scale = true
+
+[sub_resource type="QuadMesh" id="QuadMesh_wo447"]
+material = SubResource("StandardMaterial3D_5tleu")
+size = Vector2(0.035, 0.035)
+
+[node name="Main" type="Node3D" unique_id=1044344606]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=968234489]
+environment = ExtResource("1_jy1fe")
+camera_attributes = SubResource("CameraAttributesPractical_4csxf")
+
+[node name="Skylight" type="DirectionalLight3D" parent="." unique_id=1075023618]
+transform = Transform3D(-0.39391902, 0.81767136, -0.41981113, 0, 0.45674083, 0.8895998, 0.91914517, 0.35043028, -0.1799189, -2.53, 30.368778, -7.68)
+light_color = Color(1, 0.957, 0.886, 1)
+light_energy = 4.0
+light_volumetric_fog_energy = 3.5
+light_specular = 0.5
+shadow_enabled = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.5
+directional_shadow_split_1 = 0.08
+directional_shadow_split_2 = 0.22
+directional_shadow_split_3 = 0.52
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 80.0
+
+[node name="Env" parent="." unique_id=2078934099 instance=ExtResource("2_a7yhm")]
+
+[node name="Player" type="Node3D" parent="." unique_id=1920299831]
+
+[node name="Player" parent="Player" unique_id=1401142565 instance=ExtResource("3_ejfwp")]
+
+[node name="Water" parent="." unique_id=1445783875 instance=ExtResource("4_hr8ny")]
+
+[node name="FX" type="Node3D" parent="." unique_id=782154977]
+
+[node name="FOG_PoolMurk" type="FogVolume" parent="FX" unique_id=1277756121]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 2.5, -1.25)
+size = Vector3(31, 5, 26.5)
+material = SubResource("FogMaterial_j4qc6")
+
+[node name="Motes" parent="FX" unique_id=1870499055 instance=ExtResource("5_x3q4g")]
+process_material = SubResource("ParticleProcessMaterial_d4drx")
+draw_pass_1 = SubResource("QuadMesh_wo447")
+
+[node name="Drips" type="Node3D" parent="FX" unique_id=802594583]
+script = ExtResource("7_1bjhi")
+
+[node name="Audio" type="Node3D" parent="." unique_id=1771685201]
+
+[node name="RouteAudit" type="Node3D" parent="." unique_id=99760940]
+script = ExtResource("8_w00hp")
+run_on_start = false
+
+[node name="Fills" type="Node3D" parent="." unique_id=1546549368]
+
+[node name="FILL_Recess" type="OmniLight3D" parent="Fills" unique_id=211227489]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 2, -4)
+light_color = Color(0.6, 0.78, 0.86, 1)
+light_energy = 0.3
+light_specular = 0.0
+omni_range = 16.0
+omni_attenuation = 1.6
+
+[node name="FILL_PoolBack" type="OmniLight3D" parent="Fills" unique_id=1582214529]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 2.5, -8)
+light_color = Color(0.6, 0.78, 0.86, 1)
+light_energy = 0.3
+light_specular = 0.0
+omni_range = 18.0
+omni_attenuation = 1.6
+
+[node name="FILL_OutcropBack" type="OmniLight3D" parent="Fills" unique_id=530626342]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 3, 3)
+light_color = Color(0.6, 0.78, 0.86, 1)
+light_energy = 0.3
+light_specular = 0.0
+omni_range = 12.0
+omni_attenuation = 1.6
+
+[node name="HeroCam" type="Camera3D" parent="." unique_id=844776093]
+transform = Transform3D(1, 0, 0, 0, 0.99488074, 0.101056285, 0, -0.101056285, 0.99488074, 0, 7.2, 14)
+far = 400.0
+script = ExtResource("9_8sme1")
+
+[node name="Foliage" type="Node3D" parent="." unique_id=1074239637]
+script = ExtResource("10_ygdbv")
