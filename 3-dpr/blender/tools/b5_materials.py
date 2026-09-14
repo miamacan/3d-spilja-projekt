@@ -1,48 +1,7 @@
-"""b5_materials.py -- rewire the limestone materials to images. Runs INSIDE Blender.
+# Spaja materijale stijene na prave slikovne teksture (base colour, normal, ORM)
+# umjesto proceduralnog shadera, jer Godot/glTF ne mogu prenijeti Blenderov
+# node-graf - samo gotove slike.
 
-Companion to b5_textures.py. That one makes the maps; this one wires them and
-throws the procedural trees away, so it is the DESTRUCTIVE half of the session.
-Save cave_B5_procedural.blend before running it -- the 30-node look-dev graphs
-are not recoverable from anything else.
-
-WHAT IT DOES
-
-1. Reorders the UV layers so UVTile is index 0 and UVMap index 1, on every mesh
-   carrying a limestone material.
-
-   WHY: with one-layer materials the shipped textures sample UVTile, and glTF
-   writes a texture's TEXCOORD index from the layer's POSITION in the list, not
-   from which one is active_render. Left at index 1 the whole texture set would
-   arrive in Godot on UV2 -- the slot Godot fills with generated lightmap UVs on
-   import (contract  2). So UVTile has to be index 0.
-
-   This changes a  3 invariant ("UVMap kept active and active_render"). It is
-   forced by the one-layer decision, not chosen. UVMap survives intact at index
-   1 and stays the ACTIVE (edit) layer; it is still what the deferred per-mesh
-   macro dirt map will bake into. The reorder round-trip is verified
-   coordinate-by-coordinate, because silently scrambling a 139k-tri unwrap would
-   be an expensive thing to discover later.
-
-2. Clears both limestone node trees and rebuilds them from five node types
-   only, so the contract's node-type check passes literally:
-   {Principled BSDF, Image Texture, Normal Map, Separate Colour, Material Output}
-
-   ORM: R = AO is deliberately LEFT UNCONNECTED. Principled has no AO input, and
-   multiplying it into base colour would need a Mix node, which the allowlist
-   forbids. Godot's shader reads it off the ORM image. G -> Roughness,
-   B -> Metallic.
-
-3. Runs the node-type check across every material that exports (collections
-   10-70) and returns the result rather than asserting, so the caller can report
-   a measured pass instead of a hoped-for one.
-
-WHAT IT DELIBERATELY DOES NOT DO
-The look-dev's stratification bands, water stains and wet band were driven by
-world Z and cannot survive into a surface tile (see b5_textures.py's header for
-the measurement). They are not reproduced here. The rewired walls carry
-limestone SURFACE CHARACTER only; the world-space layers come back as the
-deferred per-mesh macro maps, or in Godot's shader.
-"""
 import os
 
 import bpy
@@ -50,7 +9,7 @@ import bpy
 TEX_DIR = "textures"
 SETS = {
     "M_Limestone_Shell": "T_Limestone",
-    "M_Limestone_Outcrop": "T_Limestone",   # its unique 4K set is deferred
+    "M_Limestone_Outcrop": "T_Limestone",
 }
 EXPORT_COLLECTIONS = ("10_CAVE", "20_ROCKS", "30_VEGETATION",
                       "40_ENTRANCE", "50_WATER", "60_COLLISION", "70_MARKERS")
@@ -59,6 +18,7 @@ ALLOWED = {"ShaderNodeBsdfPrincipled", "ShaderNodeTexImage", "ShaderNodeNormalMa
 
 
 def _grab(me, name):
+    # čita sve UV koordinate jednog UV sloja u niz brojeva
     import numpy as np
     lay = me.uv_layers[name]
     a = np.empty(len(lay.data) * 2, dtype=np.float32)
@@ -67,7 +27,8 @@ def _grab(me, name):
 
 
 def reorder_uvs(ob):
-    """UVTile to index 0, UVMap to index 1, verified exact."""
+    # UVTile mora biti prvi UV sloj (index 0), inače Godot pri uvozu tu teksturu
+    # stavi na pogrešan UV slot (koji je rezerviran za lightmape)
     import numpy as np
     me = ob.data
     names = [l.name for l in me.uv_layers]
@@ -84,7 +45,7 @@ def reorder_uvs(ob):
         moved = True
     after = {n: _grab(me, n) for n in ("UVMap", "UVTile")}
     me.uv_layers["UVTile"].active_render = True
-    me.uv_layers.active = me.uv_layers["UVMap"]      # stays the edit layer
+    me.uv_layers.active = me.uv_layers["UVMap"]
     return {
         "object": ob.name,
         "order": [l.name for l in me.uv_layers],
@@ -96,6 +57,8 @@ def reorder_uvs(ob):
 
 
 def load_image(fn, non_color):
+    # učita teksturu s diska (ili je pronađe ako je već učitana) i postavi joj ispravan
+    # prostor boje - "Non-Color" za normal/ORM mape, "sRGB" za obične boje
     path = os.path.join(os.path.dirname(os.path.dirname(bpy.data.filepath)), TEX_DIR, fn)
     img = bpy.data.images.get(fn)
     if img is None:
@@ -104,13 +67,15 @@ def load_image(fn, non_color):
     img.colorspace_settings.name = "Non-Color" if non_color else "sRGB"
     img.alpha_mode = "NONE"
     try:
-        img.filepath = bpy.path.relpath(path)          # keep the repo relative
+        img.filepath = bpy.path.relpath(path)
     except Exception:
         pass
     return img
 
 
 def rewire(mat, tex_set):
+    # obriše stari shader i sagradi novi, jednostavan: 3 slike (base colour, normal, ORM)
+    # spojene ravno na Principled BSDF - to je materijal koji glTF/Godot razumije
     nt = mat.node_tree
     nt.nodes.clear()
     out = nt.nodes.new("ShaderNodeOutputMaterial"); out.location = (520, 0)
@@ -124,7 +89,7 @@ def rewire(mat, tex_set):
     bc.image = load_image(tex_set + "_BC.png", False)
     nm_t.image = load_image(tex_set + "_N.png", True)
     orm_t.image = load_image(tex_set + "_ORM.png", True)
-    nmap.uv_map = ""            # empty = the mesh's active render layer (UVTile)
+    nmap.uv_map = ""
 
     L = nt.links.new
     L(bc.outputs["Color"], bsdf.inputs["Base Color"])
@@ -139,6 +104,7 @@ def rewire(mat, tex_set):
 
 
 def exported_materials():
+    # skupi sve materijale koji se stvarno izvoze (unutar kolekcija 10-70)
     mats, seen = [], set()
     for cname in EXPORT_COLLECTIONS:
         coll = bpy.data.collections.get(cname)
@@ -153,6 +119,8 @@ def exported_materials():
 
 
 def node_type_check():
+    # provjera: svi materijali smiju koristiti SAMO dopuštene tipove node-ova
+    # (jer glTF ne zna izvesti bilo koji drugi shader čvor)
     used, offenders = set(), {}
     for m in exported_materials():
         if not m.node_tree:
@@ -169,6 +137,7 @@ def node_type_check():
 
 
 def run():
+    # glavna funkcija: prespoji materijale, poredaj UV slojeve, i provjeri rezultat
     rep = {"uv": [], "materials": []}
     for mat_name, tex_set in SETS.items():
         mat = bpy.data.materials.get(mat_name)

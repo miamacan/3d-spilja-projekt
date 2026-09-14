@@ -1,47 +1,7 @@
-"""b5_textures.py -- the tileable texture sets. Runs INSIDE Blender.
+# Generira teksture koje se ponavljaju bez šava (tileable): stijena i mahovina.
+# Umjesto da se teksture ručno crtaju ili peku iz Blenderovog shadera, ovdje se
+# matematički (šumom) generiraju base colour, normal i ORM slika za svaku od njih.
 
-Third generator in the project, after gen_cave.py (cloud) and b4_vegetation.py
-(Blender). This one is Blender-side only because it needs nothing but numpy,
-which Blender bundles (2.3.4 on Lovro's 5.1.2).
-
-WHAT IT MAKES  -> <project>/textures/
-    T_Limestone_BC.png   1024^2  sRGB      tile = 2.0 m, matches UVTile exactly
-    T_Limestone_N.png    1024^2  Non-Color OpenGL tangent normal (green = +V)
-    T_Limestone_ORM.png  1024^2  Non-Color R=AO  G=roughness  B=metallic(0)
-    T_Moss_BC.png        1024^2  sRGB      tile = 0.5 m
-    T_Moss_N.png         1024^2  Non-Color
-    T_Moss_ORM.png       1024^2  Non-Color
-
-WHY IT IS SYNTHESISED, NOT BAKED
-Baking a tileable map out of Cycles means fighting for seamlessness and then
-hoping. Here every octave is a PERIODIC value-noise lattice whose indices wrap
-mod L, so the tile is seamless by construction, not by inspection -- and
-verify() measures the seam step against the interior step to prove it.
-
-WHY THE TILE IS ISOTROPIC AND HAS NO STRATIFICATION BANDS
-The look-dev's stratification, water stains and wet band are all driven by
-WORLD Z (Geometry > Separate XYZ), so they cannot live in a surface tile unless
-the tile's V axis follows world up. It does not: measured over
-CAVE_Shell_Main's 2630.8 m2 of wall (|nz| < 0.7), world +Z projects into UVTile
-at a flat spread of angles -- 19.5% of that area within +-15 deg of V-is-up,
-against 16.7% for a uniform distribution. Smart UV Project gives no consistent
-orientation, so a banded tile would run in random directions island to island.
-Bands therefore stay a world-space layer: either the deferred per-mesh macro
-maps, or Godot's shader. THIS TILE CARRIES SURFACE CHARACTER ONLY.
-
-PALETTE IS NOT INVENTED. It is lifted off the session-5 procedural trees so the
-rewired material lands in the same place as the look-dev:
-    base colour ramp   linear 0.105,0.098,0.086 -> 0.215,0.203,0.18
-    detail multiply    0.18 factor  (Mix (Legacy).004)
-    detail noise       Noise 2D scale 9 on UVTile = ~0.22 m features
-    bump distance      0.045 m      (Bump.001)
-    dry roughness      0.82         (Map Range.002 To Min)
-
-CONVENTION TRAP: arrays here are built with row index increasing = +V (up), and
-write_png flips vertically on the way out, because PNG row 0 is the TOP row
-while Blender's UV v=0 is the BOTTOM. Get this wrong and every normal map has
-its green channel inverted.
-"""
 import os
 import struct
 import zlib
@@ -50,27 +10,19 @@ import bpy
 import numpy as np
 
 RES = 1024
-LIMESTONE_TILE_M = 2.0          # must equal UVTile's metres-per-unit
+LIMESTONE_TILE_M = 2.0
 MOSS_TILE_M = 0.5
 SEED = 20260913
 
 
-# ---------------------------------------------------------------- noise -----
-
 def _fade(t):
+    # glatka krivulja za interpolaciju šuma (standardni "ease" oblik)
     return t * t * t * (t * (t * 6 - 15) + 10)
 
 
 def pnoise(res, L, rng, off=None):
-    """Periodic value noise: an L x L random lattice sampled at res x res.
-
-    Seamless because the lattice indices wrap mod L and the sample grid advances
-    L/res per pixel, so the last column sits exactly one pixel short of the
-    first. The per-octave phase `off` matters: without it every octave puts a
-    lattice line on u=0 and v=0, where the fade curve's derivative is zero, and
-    the tile edge comes out measurably flatter than its interior (seam ratio
-    0.06 instead of ~1). Offsetting by a constant keeps the period exactly L.
-    """
+    # "periodični" šum - napravljen tako da mu se rubovi savršeno spajaju,
+    # pa se tekstura može ponavljati (tile) bez vidljivog šava
     g = rng.random((L, L))
     if off is None:
         off = (rng.random() * L, rng.random() * L)
@@ -92,6 +44,7 @@ def pnoise(res, L, rng, off=None):
 
 
 def fbm(res, base_L, octaves, roughness, rng, ridged=False):
+    # zbraja više slojeva šuma različite gustoće (fractal noise) - daje prirodniji izgled
     out = np.zeros((res, res))
     amp = 1.0
     tot = 0.0
@@ -108,12 +61,13 @@ def fbm(res, base_L, octaves, roughness, rng, ridged=False):
 
 
 def norm01(a):
+    # svede vrijednosti u polju na raspon 0-1
     lo, hi = float(a.min()), float(a.max())
     return (a - lo) / (hi - lo) if hi > lo else np.zeros_like(a)
 
 
 def gblur(a, sigma_px):
-    """Periodic gaussian blur in the frequency domain -- wraps for free."""
+    # zamućenje (blur), koristi se za ambient occlusion i za "toplije" mrlje boje
     fy = np.fft.fftfreq(a.shape[0])[:, None]
     fx = np.fft.fftfreq(a.shape[1])[None, :]
     k = np.exp(-2.0 * (np.pi * sigma_px) ** 2 * (fx * fx + fy * fy))
@@ -121,14 +75,14 @@ def gblur(a, sigma_px):
 
 
 def smoothstep(e0, e1, x):
+    # glatki prijelaz između dvije vrijednosti (kao maska/prag)
     t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
 
 
-# ------------------------------------------------------------- transforms ----
-
 def height_to_normal(h, amp_m, tile_m):
-    """OpenGL tangent-space normal from a height field. Periodic derivatives."""
+    # pretvara visinsku kartu (height map) u normal mapu - iz nagiba površine
+    # izračuna smjer "lažne" normale koju GPU koristi za osvjetljenje
     px = tile_m / h.shape[0]
     hm = h * amp_m
     gx = (np.roll(hm, -1, axis=1) - np.roll(hm, 1, axis=1)) / (2.0 * px)
@@ -139,12 +93,7 @@ def height_to_normal(h, amp_m, tile_m):
 
 
 def ao_from_height(h, scales=((3.0, 0.9), (9.0, 0.7), (26.0, 0.5)), floor=0.30):
-    """Concavity AO: how far below its own neighbourhood each pixel sits.
-
-    Scaled on the 98th percentile, not the max. norm01 divides by a single rare
-    extreme, which left the first pass with a mean AO of 0.979 -- an AO map that
-    does nothing.
-    """
+    # računa ambient occlusion (zatamnjenje u udubinama) iz visinske karte
     occ = np.zeros_like(h)
     for sigma, w in scales:
         occ += w * np.clip(gblur(h, sigma) - h, 0.0, None)
@@ -154,12 +103,13 @@ def ao_from_height(h, scales=((3.0, 0.9), (9.0, 0.7), (26.0, 0.5)), floor=0.30):
 
 
 def lin2srgb(x):
+    # pretvara linearnu boju u sRGB (format u kojem se boje standardno spremaju)
     x = np.clip(x, 0.0, 1.0)
     return np.where(x <= 0.0031308, x * 12.92, 1.055 * np.power(x, 1.0 / 2.4) - 0.055)
 
 
 def write_png(path, arr, srgb):
-    """arr is float (H,W,3) with row index = +V. Flipped on write (PNG row 0 = top)."""
+    # ručno zapisuje PNG datoteku iz numpy polja (bez vanjskih biblioteka)
     a = lin2srgb(arr) if srgb else np.clip(arr, 0.0, 1.0)
     b8 = np.ascontiguousarray(np.flipud(np.rint(a * 255.0)).astype(np.uint8))
     h, w, _ = b8.shape
@@ -179,21 +129,20 @@ def write_png(path, arr, srgb):
 
 
 def seam_ratio(a):
-    """Seam step over interior step. 1.0 means the wrap is indistinguishable."""
+    # provjerava koliko se vidi šav na rubu teksture kad se ponavlja (1.0 = savršeno nevidljivo)
     a = a if a.ndim == 2 else a.mean(axis=-1)
     interior = 0.5 * (np.abs(np.diff(a, axis=1)).mean() + np.abs(np.diff(a, axis=0)).mean())
     seam = 0.5 * (np.abs(a[:, 0] - a[:, -1]).mean() + np.abs(a[0, :] - a[-1, :]).mean())
     return float(seam / interior) if interior > 0 else float("nan")
 
 
-# ------------------------------------------------------------------ sets -----
-
 def limestone(res=RES):
+    # generira teksturu vapnenačke stijene: boju, normal mapu i ORM (AO+roughness)
     rng = np.random.default_rng(SEED)
-    meso = fbm(res, 2, 4, 0.55, rng)                    # ~1 m lumps, tile-wide
-    detail = fbm(res, 8, 5, 0.60, rng)                  # ~0.22 m, the look-dev band
-    grain = fbm(res, 32, 3, 0.55, rng)                  # ~6 cm tooth
-    cracks = fbm(res, 4, 5, 0.62, rng, ridged=True)     # thin fractures
+    meso = fbm(res, 2, 4, 0.55, rng)
+    detail = fbm(res, 8, 5, 0.60, rng)
+    grain = fbm(res, 32, 3, 0.55, rng)
+    cracks = fbm(res, 4, 5, 0.62, rng, ridged=True)
     pits = fbm(res, 48, 2, 0.5, rng)
 
     crack_mask = smoothstep(0.86, 0.99, norm01(cracks))
@@ -203,12 +152,12 @@ def limestone(res=RES):
          - 0.30 * crack_mask - 0.16 * pit_mask)
     h = norm01(h)
 
-    # base colour: the session-5 ramp, driven by the same field as the relief
+
     lo = np.array([0.105, 0.098, 0.086])
     hi = np.array([0.215, 0.203, 0.180])
     t = smoothstep(0.18, 0.86, h)[..., None]
     bc = lo + (hi - lo) * t
-    bc *= (1.0 - 0.18 * (1.0 - norm01(detail)))[..., None]   # Mix (Legacy).004
+    bc *= (1.0 - 0.18 * (1.0 - norm01(detail)))[..., None]
     bc *= (1.0 - 0.42 * crack_mask - 0.28 * pit_mask)[..., None]
     bc *= (0.94 + 0.12 * norm01(gblur(meso, 40.0)))[..., None]
 
@@ -221,6 +170,7 @@ def limestone(res=RES):
 
 
 def moss(res=RES):
+    # generira teksturu mahovine - isti princip kao stijena, samo zelena i sitnija
     rng = np.random.default_rng(SEED + 77)
     clump = fbm(res, 3, 5, 0.58, rng)
     frond = fbm(res, 20, 4, 0.62, rng)
@@ -228,8 +178,8 @@ def moss(res=RES):
 
     h = norm01(0.58 * norm01(clump) + 0.30 * norm01(frond) + 0.12 * norm01(fine))
 
-    lo = np.array([0.018, 0.055, 0.016])     # shaded depth
-    hi = np.array([0.130, 0.300, 0.075])     # lit tip, same family as M_VineLeaf
+    lo = np.array([0.018, 0.055, 0.016])
+    hi = np.array([0.130, 0.300, 0.075])
     t = smoothstep(0.10, 0.92, h)[..., None]
     bc = lo + (hi - lo) * t
     warm = norm01(gblur(clump, 22.0))[..., None]
@@ -242,10 +192,8 @@ def moss(res=RES):
     return dict(BC=(bc, True), N=(nrm, False), ORM=(orm, False)), h
 
 
-# ------------------------------------------------------------------ run ------
-
 def run(res=RES):
-    # cave.blend lives in <project>/blender/, so the project root is two up.
+    # generira obje teksture (stijena, mahovina) i sprema sve slike na disk
     root = os.path.dirname(os.path.dirname(bpy.data.filepath))
     out = os.path.join(root, "textures")
     os.makedirs(out, exist_ok=True)

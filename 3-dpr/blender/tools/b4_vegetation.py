@@ -1,26 +1,6 @@
-"""
-B4 — vegetation and the Col moss mask.
+# Generira vegetaciju (loze, korijenje, paprati) i masku mahovine (Col atribut).
+# Pokreće se unutar Blendera. Radi na sceni koja već ima gotovu geometriju špilje.
 
-RUNS INSIDE BLENDER (needs bpy). Unlike gen_cave.py, which runs in the cloud
-container because it needs scipy/skimage, everything here is Blender-side:
-curves, mesh building, raycasts against the shell, and the vertex-colour pass.
-
-Run it on a file that already has B3's state. It is idempotent: it deletes and
-rebuilds VINE_*, ROOT_*, the ferns numbered 9 and up, and the Col attribute on
-every rock mesh, then re-seats MARK_Drip_01..05.
-
-    exec(open(r"C:\\Users\\Mia\\Desktop\\3-dpr\\blender\\tools\\b4_vegetation.py").read())
-
-WHY THE VINES HANG WHERE THEY DO — this is the one thing not to "fix" blindly.
-The brief says "ceiling points near the skylight". The dome around the skylight
-is at Z 27-28, and the hero frame's top edge is only ~3.5 m above eye level at
-that distance: a vine hung from the true ceiling is entirely ABOVE the frame
-and invisible. The reference's strands are visible because they hang from the
-overhanging upper wall at Z 11-17.5, where the chamber radius shrinks with
-height so the rock leans inward and a strand hangs free of it. That band was
-found by probing, not guessed, and the lengths are then SOLVED so each tip
-lands in the reference's measured band (tips v 0.23-0.40).
-"""
 import bpy, bmesh, math, numpy as np
 from mathutils import Vector
 from bpy_extras.object_utils import world_to_camera_view
@@ -32,13 +12,13 @@ shell = bpy.data.objects["CAVE_Shell_Main"]
 ledge = bpy.data.objects["LEDGE_Outcrop"]
 cam = bpy.data.objects["CAM_Hero"]
 
-AX, AY = 0.5, 1.0        # chamber axis, locked
-SKY_AZ = 114.4           # azimuth of MARK_Skylight from that axis
-BAND_Z = (11.0, 17.5)    # the overhang band that projects into the hero frame
+AX, AY = 0.5, 1.0
+SKY_AZ = 114.4
+BAND_Z = (11.0, 17.5)
 
 
-# ---------------------------------------------------------------- helpers
 def activate(ob):
+    # postavlja objekt kao aktivnog/odabranog u Blenderu
     for o in bpy.context.selected_objects:
         o.select_set(False)
     vl.objects.active = ob
@@ -46,11 +26,12 @@ def activate(ob):
 
 
 def vof(p):
-    """frame position from the TOP, 0..1"""
+    # okomita pozicija točke u kadru kamere (0 = dno, 1 = vrh)
     return 1.0 - world_to_camera_view(scene, cam, Vector(p)).y
 
 
 def uof(p):
+    # vodoravna pozicija točke u kadru kamere
     return world_to_camera_view(scene, cam, Vector(p)).x
 
 
@@ -59,10 +40,8 @@ _DIRS = [Vector(d) for d in ((0, 0, 1), (0, 0, -1), (1, 0, 0),
 
 
 def in_void(p):
-    """The shell is a ONE-SIDED surface with normals facing the void, so from
-    open air a ray hits a FRONT face: dot(normal, direction) < 0. Vote over six
-    axes -- a single noise-tilted face was enough to fail a single-ray test and
-    it silently threw away 8 of 14 vines."""
+    # provjerava je li točka unutar šupljine špilje (a ne u kamenu) - pošalje
+    # zrake u 6 smjerova i glasa po tome gdje pogađaju stijenu
     v = Vector(p)
     votes = seen = 0
     for d in _DIRS:
@@ -76,12 +55,14 @@ def in_void(p):
 
 
 def sstep(e0, e1, x):
+    # glatki prijelaz (smoothstep) između dvije vrijednosti
     t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
 
 
 def _hash01(ix, iy, iz, seed):
-    h = (ix.astype(np.int64) * 73856093) ^ (iy.astype(np.int64) * 19349663) \
+    # pretvara 3 cijela broja (koordinate) u pseudo-slučajan broj 0-1
+    h = (ix.astype(np.int64) * 73856093) ^ (iy.astype(np.int64) * 19349663)\
         ^ (iz.astype(np.int64) * 83492791) ^ np.int64(seed * 2654435761)
     h = (h ^ (h >> 13)) * np.int64(1274126177)
     h = h ^ (h >> 16)
@@ -89,8 +70,7 @@ def _hash01(ix, iy, iz, seed):
 
 
 def vnoise(p, freq, seed):
-    """vectorised 3D value noise -- a per-vertex python loop over 70k verts
-    with mathutils.noise was the slow part; this is pure numpy"""
+    # 3D šum (value noise) za više točaka odjednom - numpy verzija, brža od petlje
     q = p * freq
     i = np.floor(q)
     f = q - i
@@ -109,6 +89,8 @@ def vnoise(p, freq, seed):
 
 
 def placeholder_material(name, rgba, alpha_clip=False):
+    # napravi (ili nađi) jednostavan materijal zadane boje - koristi se dok
+    # se ne poveže prava tekstura
     m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     m.use_nodes = True
     b = m.node_tree.nodes.get("Principled BSDF")
@@ -126,11 +108,9 @@ def placeholder_material(name, rgba, alpha_clip=False):
     return m
 
 
-# ================================================================== VINES
+# ================================================================== LOZE (VINE)
 def find_anchor(az_deg, rad_pref):
-    """An upward ray onto the overhanging dome. Requires nz < -0.25: an
-    upward-facing hit means the ray started buried and came out on top of a
-    rock shelf, and a vine hung from there passes straight down through it."""
+    # traži mjesto na stropu (preklopljenom dijelu stijene) odakle loza može visjeti
     order = sorted(np.arange(10.15, 12.75, 0.13), key=lambda r: abs(r - rad_pref))
     for rad in order:
         for jit in (0.0, -2.0, 2.0, -4.0, 4.0):
@@ -150,9 +130,8 @@ def find_anchor(az_deg, rad_pref):
 
 
 def vine_path(a, length, seed, step_in, n=180):
-    """steps inward off the rock over the first 18% then hangs with a slight
-    catenary bow and one or two kinks. The inward step matters: bowing alone
-    swung strands back into the wall."""
+    # generira niz točaka koje opisuju putanju jedne loze od sidra (a) prema dolje,
+    # s blagim njihanjem (bow) i par "kinkova" (nasumičnih zavoja)
     r = np.random.default_rng(seed)
     t = np.linspace(0, 1, n)
     inw = Vector((AX - a.x, AY - a.y, 0.0))
@@ -181,11 +160,13 @@ def vine_path(a, length, seed, step_in, n=180):
 
 
 def buried_frac(pts, skip=6):
+    # postotak točaka putanje koje su "zakopane" u kamenu (loza ne smije prolaziti kroz zid)
     sm = pts[::skip]
     return sum(0 if in_void(p) else 1 for p in sm) / len(sm)
 
 
 def ledge_clearance(pts, skip=5):
+    # najmanja udaljenost putanje od stijene (izbočine) - da loza ne dodiruje kamen
     d = 1e9
     for p in pts[::skip]:
         ok, loc, nrm, idx = ledge.closest_point_on_mesh(p)
@@ -195,7 +176,7 @@ def ledge_clearance(pts, skip=5):
 
 
 def solve_length(a, target_v):
-    """length in 2..8 m whose tip lands nearest target_v in the hero frame"""
+    # isprobava duljine loze dok njen kraj (vrh) ne završi na željenoj visini u kadru kamere
     best = (1e9, 4.0)
     for L in np.arange(2.0, 8.01, 0.1):
         e = abs(vof(Vector((a.x, a.y, a.z - L))) - target_v)
@@ -204,19 +185,20 @@ def solve_length(a, target_v):
     return best[1]
 
 
-# Clumped, NOT evenly spaced: evenly spaced strands at one radius read as a
-# fence. Three clusters plus strays, dense in the middle per the brief.
+# pozicije loza (azimut i radijus) - ručno namješteno da izgledaju grupirano, ne u nizu
 VINE_OFFS = [-6, -3, 0, 4, 7,  -20, -17, -13,  14, 18,  -36, -30,  26, 34]
 VINE_RADP = [10.3, 11.6, 12.4, 10.9, 11.9, 10.4, 12.1, 11.2,
              10.6, 12.3, 11.4, 10.2, 12.0, 10.8]
 
 
 def vine_target_v(off):
+    # željena visina vrha loze u kadru - one bliže sredini vise niže
     mid = 1.0 - min(abs(off) / 40.0, 1.0)
-    return 0.245 + 0.155 * (mid ** 0.7)     # reference: tips v 0.23..0.40
+    return 0.245 + 0.155 * (mid ** 0.7)
 
 
 def build_vines(M_leaf):
+    # glavna funkcija za loze: obriše stare, generira nove (stabljika + listovi) za svaku poziciju
     for o in list(VEG.objects):
         if o.name.startswith("VINE_"):
             bpy.data.objects.remove(o, do_unlink=True)
@@ -228,7 +210,7 @@ def build_vines(M_leaf):
             rep["VINE_%02d" % i] = {"error": "no anchor"}
             continue
         L = solve_length(a, vine_target_v(off))
-        bev = 0.030 + 0.030 * rng.random()      # spec 0.03-0.06
+        bev = 0.030 + 0.030 * rng.random()
         seed = 7000 + i * 53
         chosen = None
         for step_in in (0.45, 0.70, 0.95, 1.25, 1.60):
@@ -247,7 +229,7 @@ def build_vines(M_leaf):
         cu = bpy.data.curves.new("VINE_%02d" % i, 'CURVE')
         cu.dimensions = '3D'
         cu.bevel_depth = bev
-        cu.bevel_resolution = 0      # 4-sided: it is a 3-6 cm strand
+        cu.bevel_resolution = 0
         cu.resolution_u = 3
         sp = cu.splines.new('BEZIER')
         sp.bezier_points.add(len(ctrl) - 1)
@@ -260,10 +242,7 @@ def build_vines(M_leaf):
         bpy.ops.object.convert(target='MESH')
         stem = bpy.data.objects["VINE_%02d" % i]
 
-        # leaf cards. Built directly rather than with geometry nodes realised
-        # to mesh: the end state is the same realised mesh, and this is
-        # deterministic and scriptable. Two leaf variants share one atlas --
-        # even k takes u 0..0.5, odd k takes u 0.5..1.
+        # kartice lišća - male ravne pločice zalijepljene duž stabljike
         r = np.random.default_rng(seed + 9001)
         nleaf = int(round(L * 70))
         bm = bmesh.new()
@@ -315,8 +294,9 @@ def build_vines(M_leaf):
     return rep
 
 
-# ================================================================== ROOTS
+# ================================================================== KORIJENJE (ROOT)
 def make_root(name, pts, bev, res_u=3, bev_res=1):
+    # napravi jedan korijen kao 3D krivulju (curve) kroz zadane točke, pa je pretvori u mrežu
     cu = bpy.data.curves.new(name, 'CURVE')
     cu.dimensions = '3D'
     cu.bevel_depth = bev
@@ -338,6 +318,8 @@ def make_root(name, pts, bev, res_u=3, bev_res=1):
 
 
 def build_roots(M_bark):
+    # generira sve korijenje: tri deblja korijena na desnom zidu + jedan tanak
+    # koji prelazi preko vrha kadra
     for o in list(VEG.objects):
         if o.name.startswith("ROOT_"):
             bpy.data.objects.remove(o, do_unlink=True)
@@ -348,12 +330,14 @@ def build_roots(M_bark):
     O = cam.matrix_world.translation
 
     def wall_at(u, v):
+        # pronađe točku na zidu koja odgovara zadanoj poziciji (u,v) u kadru kamere
         d = (R @ Vector(((u - 0.5) * 2 * hf, (0.5 - v) * 2 * vf, -1.0))).normalized()
         ok, loc, nrm, idx = shell.ray_cast(O, d, distance=200.0)
         return (loc.copy(), nrm.copy()) if ok else (None, None)
 
     rep = {}
-    # ROOT_01..03: thick roots pushing through the upper right wall
+
+    # tri deblja korijena, ručno namještene pozicije na desnom zidu
     for i, (az0, z0, length, bev) in enumerate(
             [(26.0, 13.4, 3.4, 0.26), (38.0, 12.9, 2.8, 0.19), (17.0, 11.6, 3.9, 0.22)], 1):
         pts = []
@@ -376,11 +360,7 @@ def build_roots(M_bark):
                                 "v_range": [round(min(vof(p) for p in pts), 3),
                                             round(max(vof(p) for p in pts), 3)]}
 
-    # ROOT_04: the thin line crossing the top of the hero frame. Sampled by
-    # casting camera rays along a target v and taking the wall hit, so it lands
-    # on rock AND projects where the reference's line runs. Seating it proud of
-    # the rock moves it toward the camera, which LIFTS it in frame -- so aim
-    # lower than the band you want.
+    # četvrti, tanki korijen koji prelazi preko vrha kadra - traži najbolju "ciljanu" visinu
     best = None
     for aim in (0.105, 0.125, 0.145, 0.165):
         track = []
@@ -409,11 +389,10 @@ def build_roots(M_bark):
     return rep
 
 
-# ============================================================== Col MASK
+# ============================================================== MASKA MAHOVINE
 def openness(ob):
-    """Per-vertex openness via Dirty Vertex Colors: bright = convex/open, dark
-    = concave crevice. Normalised, so the sRGB curve on BYTE_COLOR only
-    reshapes it monotonically and does not matter."""
+    # koliko je svaki vrh "otvoren" (konveksan) ili "zatvoren" (u pukotini) -
+    # koristi Blenderov "dirty vertex colors" alat pa normalizira rezultat
     me = ob.data
     tmp = me.color_attributes.new(name="_tmp_ao", type='BYTE_COLOR', domain='CORNER')
     me.color_attributes.active_color = tmp
@@ -436,19 +415,13 @@ def openness(ob):
 
 
 def write_col():
-    """R = up x noise x crevice, biased strong on the outcrop and left wall,
-    faint on the right wall and ceiling, ZERO in the wet band.
-
-    Two interpretations were fixed deliberately:
-      * (1 - AO). The brief says moss "sits in crevices", so occlusion BOOSTS
-        the mask. AO is read as openness, making (1-AO) the occlusion amount.
-      * "zero within 0.5 m of Z = 0" is implemented as zero everywhere below
-        Z 0.55 and ramping to full by 1.35, so submerged rock is bare too.
-    """
+    # za svaki kameni objekt izračuna masku mahovine (0-1) i spremi je kao vertex
+    # boju "Col" - kombinacija: gleda li vrh prema gore, šum, je li u pukotini,
+    # je li iznad vode, i strana zida
     plan = [("CAVE_Shell_Main", "shell", 1.00),
             ("LEDGE_Outcrop", "outcrop", 1.40),
             ("ENT_Tunnel", "mouth", 0.95),
-            ("ENT_Ground", "ground", 1.05)] + \
+            ("ENT_Ground", "ground", 1.05)] +\
            [(o.name, "boulder", 1.05) for o in bpy.data.collections["20_ROCKS"].objects
             if o.name.startswith("ROCK_")]
     rep = {}
@@ -465,7 +438,7 @@ def write_col():
         nr = np.empty(n * 3, dtype=np.float32); me.vertices.foreach_get("normal", nr)
         co = co.reshape(-1, 3).astype(np.float64)
         nr = nr.reshape(-1, 3).astype(np.float64)
-        M = np.array(ob.matrix_world)              # boulders carry placements
+        M = np.array(ob.matrix_world)
         wco = co @ M[:3, :3].T + M[:3, 3]
         wnr = nr @ np.linalg.inv(M[:3, :3]).T.T
         wnr = wnr / np.maximum(np.linalg.norm(wnr, axis=1, keepdims=True), 1e-9)
@@ -480,9 +453,9 @@ def write_col():
         wet = sstep(0.55, 1.35, z)
         high = 1.0 - 0.65 * sstep(14.0, 23.0, z)
         if kind == "shell":
-            side = 1.15 - 0.87 * sstep(-2.0, 3.0, x)   # right wall ~0.28 of left
+            side = 1.15 - 0.87 * sstep(-2.0, 3.0, x)
         elif kind == "ground":
-            side = np.ones_like(x); wet = np.ones_like(z)   # forest floor
+            side = np.ones_like(x); wet = np.ones_like(z)
         else:
             side = np.ones_like(x)
 
@@ -508,17 +481,16 @@ def write_col():
     return rep
 
 
-# ================================================================== FERNS
+# ================================================================== PAPRATI
 def build_ferns():
-    """Only the left foreground and around the tunnel mouth, per the brief.
-    Reject hits on LEDGE_Outcrop: downward rays over the left foreground land
-    on the hero rock, and the reference has moss there, not ferns."""
+    # postavlja paprati na pod - samo na dva određena mjesta: kraj lijevog zida i kod ulaza
     for o in list(VEG.objects):
         if o.name.startswith("FERN_") and int(o.name.split("_")[-1]) > 8:
             bpy.data.objects.remove(o, do_unlink=True)
     src = {1: bpy.data.objects["FERN_01_01"], 2: bpy.data.objects["FERN_02_01"]}
 
     def surface(x, y, z_from, shell_only):
+        # traži pod ispod zadane točke (zraka prema dolje)
         hits = []
         for o in (shell, ledge):
             ok, loc, nrm, idx = o.ray_cast(Vector((x, y, z_from)),
@@ -535,10 +507,10 @@ def build_ferns():
     rng = np.random.default_rng(3141)
     picked = []
     LEFT = []
-    for t in np.linspace(0.10, 0.80, 10):          # along the talus ramp
+    for t in np.linspace(0.10, 0.80, 10):
         rx = -0.6 + t * (-6.2); ry = -11.4 + t * 7.4
         LEFT += [(rx - 0.9, ry - 0.3), (rx + 0.7, ry + 0.4)]
-    for yy in (-9.5, -8.0, -6.5, -5.0, -3.5):      # left wall foot
+    for yy in (-9.5, -8.0, -6.5, -5.0, -3.5):
         LEFT += [(-7.4, yy), (-8.4, yy)]
     MOUTH = [(x, y) for y in (-12.2, -13.4, -14.6, -15.8, -17.0, -18.2)
                     for x in (-1.5, -0.6, 0.7, 1.5)]
@@ -568,7 +540,7 @@ def build_ferns():
         k = 1 if i % 2 == 0 else 2
         idx = 9 + sum(1 for o in out if o["kind"] == k)
         nm = "FERN_%02d_%02d" % (k, idx)
-        nob = bpy.data.objects.new(nm, src[k].data)      # shares mesh data
+        nob = bpy.data.objects.new(nm, src[k].data)
         VEG.objects.link(nob)
         nob.location = Vector(loc) + nrm * 0.02
         nob.rotation_euler = (0.0, 0.0, rng.random() * math.tau)
@@ -580,10 +552,9 @@ def build_ferns():
     return out
 
 
-# ================================================================== DRIPS
+# ==================================================================== KAPI
 def reseat_drips():
-    """MARK_Drip_01..05 belong at vine tips over water. Until B4 there were no
-    vines and they sat at a guessed Z 19."""
+    # postavlja markere za kapi vode (MARK_Drip) na donji kraj loza koje vise iznad jezera
     water = bpy.data.objects["WATER_Pool_Surface"]
     tips = []
     for i in range(1, 15):
@@ -607,14 +578,14 @@ def reseat_drips():
         if not e:
             continue
         e.location = (p.x, p.y, p.z - 0.06)
-        e.rotation_euler = (0.0, 0.0, 0.0)      # -Z already points the way a drop falls
+        e.rotation_euler = (0.0, 0.0, 0.0)
         out.append({"marker": e.name, "vine": "VINE_%02d" % vi,
                     "loc": [round(p.x, 2), round(p.y, 2), round(p.z - 0.06, 2)]})
     return out, len(tips)
 
 
-# =================================================================== MAIN
 if __name__ == "__main__" or True:
+    # glavni dio: pokreni sve redom (loze, korijenje, mahovina, paprati, kapi) i ispiši sažetak
     M_leaf = placeholder_material("M_VineLeaf", (0.16, 0.34, 0.10, 1.0), alpha_clip=True)
     M_bark = placeholder_material("M_RootBark", (0.13, 0.10, 0.07, 1.0))
     vines = build_vines(M_leaf)

@@ -1,3 +1,7 @@
+# Generira sliku za usporedbu: referentna fotografija vs. naš render iz Blendera.
+# Gore su dvije slike jedna pored druge, dolje je 50/50 preklop (blend) s oznakama
+# ključnih visina (Z koordinata) da se vidi poklapaju li se proporcije.
+
 from PIL import Image, ImageDraw, ImageFont
 
 REF = "/root/.claude/uploads/abd68b5b-5931-5f7c-9f9b-401f2d01a2b6/855debff-image.png"
@@ -7,10 +11,11 @@ OUT = "/mnt/user-data/outputs/b1_hero_compare.png"
 f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
 fb = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 23)
 
-PW, PH = 952, 535                      # top row panel size
+# dimenzije platna
+PW, PH = 952, 535
 GAP, LAB = 12, 34
 W = PW * 2 + GAP * 3
-BH = W - GAP * 2                        # blend panel width
+BH = W - GAP * 2
 BHh = round(BH * 1080 / 1920)
 H = LAB + PH + GAP * 2 + LAB + BHh + GAP
 
@@ -20,20 +25,19 @@ d = ImageDraw.Draw(canvas, "RGBA")
 ref = Image.open(REF).convert("RGB")
 rnd = Image.open(RND).convert("RGB")
 
-# --- top row: reference | blockout ---------------------------------------
+# gornji red: referenca lijevo, naš render desno, s vodoravnom linijom i točkom za usporedbu
 for i, (im, title) in enumerate(((ref, "REFERENCE"),
                                  (rnd, "B1 BLOCKOUT  —  CAM_Hero, Workbench"))):
     x = GAP + i * (PW + GAP)
     d.text((x, 8), title, font=fb, fill=(235, 235, 235))
     canvas.paste(im.resize((PW, PH), Image.LANCZOS), (x, LAB))
-    # matching guides on BOTH panels so positions can be compared by eye
     d.line([(x, LAB + 0.3823 * PH), (x + PW, LAB + 0.3823 * PH)],
            fill=(80, 220, 255, 150), width=1)
     sx, sy = x + 0.3429 * PW, LAB + 0.5992 * PH
     d.ellipse([sx - 11, sy - 11, sx + 11, sy + 11], outline=(255, 90, 200), width=3)
     d.rectangle([x, LAB, x + PW - 1, LAB + PH - 1], outline=(90, 90, 95), width=1)
 
-# --- bottom: 50/50 blend with the anchor read-out ------------------------
+# donji dio: 50/50 preklop dviju slika, s oznakama visina
 by = LAB + PH + GAP * 2
 d.text((GAP, by - 26), "50/50 BLEND  —  cyan = optical horizon,  "
                        "magenta = LEDGE stage top as CAM_Hero projects it",
@@ -46,6 +50,7 @@ bd = ImageDraw.Draw(canvas, "RGBA")
 
 
 def gl(vfrac, col, text):
+    # iscrtava isprekidanu vodoravnu liniju s oznakom (labelom) na zadanoj visini
     y = by + vfrac * BHh
     xx = GAP
     while xx < GAP + BH:
