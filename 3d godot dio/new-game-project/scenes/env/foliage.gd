@@ -1,18 +1,13 @@
 @tool
 extends Node3D
-##
-## G5 — puts the moss shader on the rock and a real leaf material on the
-## vegetation.
-##
-## Applied by script for the same reason water.gd is (HANDOFF_GODOT.md §4): every
-## one of these meshes lives inside the instanced cave_env.glb, and a
-## material_override on them does not survive PackedScene.pack() unless the node's
-## owner is repointed -- which makes pack() serialise the mesh inline and fork it
-## from the glb.
-##
-## @tool so the editor shows it too, which is what lets the lightmap bake see the
-## mossy albedo rather than bare limestone.
-##
+# G5 - stavlja shader mahovine na kamen i pravi materijal lišća na vegetaciju.
+#
+# Postavlja se skriptom (isti razlog kao water.gd) - jer bi override
+# materijala inače "otpao" pri spremanju scene, pa se svaki put ponovno
+# postavlja kad se scena pokrene/otvori.
+#
+# @tool je ovdje da i editor vidi ovo, jer to treba lightmap baku da
+# "vidi" mahovinu, ne golu stijenu.
 
 const MOSS_SHADER := "res://shaders/rock_moss.gdshader"
 const MOSS_BC := "res://assets/textures/T_Moss_BC.png"
@@ -20,7 +15,7 @@ const MOSS_N := "res://assets/textures/T_Moss_N.png"
 const MOSS_ORM := "res://assets/textures/T_Moss_ORM.png"
 const LEAF_ATLAS := "res://assets/textures/T_LeafAtlas.png"
 
-## Materials from the glb that should grow moss.
+# materijali iz .glb datoteke na koje treba "narasti" mahovina
 const ROCK_MATERIALS: Array[String] = [
 	"M_Limestone_Shell", "M_Limestone_Outcrop", "M_Limestone_Boulder",
 	"M_Limestone_Ground", "M_Limestone_Tunnel",
@@ -61,8 +56,8 @@ const LEAF_MATERIALS: Array[String] = ["M_VineLeaf"]
 	set(v):
 		moss_tint = v
 		_push()
-## Flat magenta = moss, black = bare. For checking the mask against Blender's
-## numbers without having to infer it from a lit render.
+# jednobojna magenta = mahovina, crno = golo - za provjeru maske bez
+# potrebe da se gleda osvijetljeni render
 @export var debug_mask := false:
 	set(v):
 		debug_mask = v
@@ -73,7 +68,7 @@ const LEAF_MATERIALS: Array[String] = ["M_VineLeaf"]
 @export_range(0.0, 1.0) var alpha_scissor := 0.5
 @export var leaf_backlight := Color(0.26, 0.32, 0.18)
 
-var _moss_mats: Dictionary = {}     # source material name -> ShaderMaterial
+var _moss_mats: Dictionary = {}     # naziv izvornog materijala -> ShaderMaterial
 var _leaf_mat: StandardMaterial3D
 var _applied := {"rock": 0, "leaf": 0, "skipped": 0}
 
@@ -104,9 +99,8 @@ func _walk(n: Node) -> void:
 		_walk(c)
 
 
-## The ORIGINAL material, not the active one. get_active_material() returns our
-## own override on a second run, which would make this read its own output and
-## lose the source textures.
+# čita IZVORNI materijal, ne trenutno postavljeni - jer bi drugi put
+# ovaj kod inače čitao svoj vlastiti rezultat, umjesto originalnih tekstura
 func _source_material(mi: MeshInstance3D) -> StandardMaterial3D:
 	if mi.mesh != null and mi.mesh.get_surface_count() > 0:
 		var m := mi.mesh.surface_get_material(0)
@@ -145,8 +139,8 @@ func _moss_material(key: String, src: StandardMaterial3D) -> ShaderMaterial:
 		return null
 	var m := ShaderMaterial.new()
 	m.shader = sh
-	# The rock layer is whatever the glTF import already wired up, per material:
-	# each mesh keeps its own baked T_Macro_* map this way, with no name table.
+	# stijena koristi teksture koje je glTF uvoz već spojio, po materijalu -
+	# tako svaki mesh čuva svoju vlastitu zapečenu T_Macro_* mapu
 	m.set_shader_parameter("rock_albedo", src.albedo_texture)
 	m.set_shader_parameter("rock_normal", src.normal_texture)
 	m.set_shader_parameter("rock_orm", src.roughness_texture)
@@ -167,8 +161,8 @@ func _leaf_material() -> StandardMaterial3D:
 		push_warning("foliage: %s missing, leaves stay flat" % LEAF_ATLAS)
 	m.albedo_texture = tex
 	m.albedo_color = Color(1, 1, 1)
-	# Scissor rather than blended alpha: leaf cards overlap heavily and blended
-	# transparency would sort wrong against itself every frame.
+	# alfa izrezivanje (scissor), ne postupno miješanje - kartice lišća se
+	# jako preklapaju, pa bi miješanje svaki frame krivo sortiralo dubinu
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	m.alpha_scissor_threshold = alpha_scissor
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -176,9 +170,6 @@ func _leaf_material() -> StandardMaterial3D:
 	m.backlight = leaf_backlight
 	m.roughness = 0.85
 	m.metallic = 0.0
-	# NOTE: no `specular` in Godot 4 -- the property is `metallic_specular`,
-	# and setting the Godot 3 name only produced a warning. Left at the default
-	# 0.5, which is what every G5 render was verified against.
 	_leaf_mat = m
 	return m
 
