@@ -1,11 +1,7 @@
 extends SceneTree
-## G5 diagnostic. Renders the SAME hero frame three ways so the brightness jump
-## can be attributed instead of guessed at:
-##   a_plain  material_override cleared -> the imported StandardMaterial3D
-##   b_moss   the moss shader as shipped
-##   c_debug  the moss shader with debug_mask set DIRECTLY on the material,
-##            bypassing foliage.gd's setter
-## and dumps every shader parameter it actually bound.
+# G5 dijagnostika: renderira isti kadar na tri načina (bez mahovine, s
+# mahovinom, i s prikazanom maskom) da se vidi točno odakle dolazi
+# razlika u svjetlini.
 
 var _out := "user://"
 var _t := 0.0
@@ -74,7 +70,6 @@ func _process(delta: float) -> bool:
 		0:
 			if _pt < 2.5: return false
 			_collect()
-			# stash the overrides, then clear them
 			for mi in _rocks:
 				_saved.append(mi.material_override)
 				mi.material_override = null

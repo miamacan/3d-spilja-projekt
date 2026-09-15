@@ -1,25 +1,6 @@
 extends SceneTree
-##
-## Headless-ish hero-view capture. Loads scenes/main.tscn, throws away the
-## player and the route audit, forces HeroCam, lets the frame settle, saves a
-## PNG and quits.
-##
-## Run it as a MAIN LOOP, not an editor script:
-##
-##   Godot --path <project> --rendering-driver d3d12 --resolution 1920x1080 \
-##         --script res://scenes/debug/hero_shot.gd -- --out C:/some/shot.png
-##
-## A real window opens for a few seconds. Godot's --headless uses a dummy
-## rendering driver and produces a black image, so there is no way around that.
-##
-## Why the long warm-up: volumetric fog uses temporal reprojection and the
-## froxel buffer needs many frames to converge. Capturing at frame 2 gives a
-## noisy, too-dark fog that looks like a fog bug. 120 frames is ~2 s at 60 fps
-## and the difference is obvious.
-##
-## Optional overrides let a whole sweep run without rewriting the .tres:
-##   -- --out a.png --exposure 1.4 --fog-density 0.05 --sun-energy 5
-##
+# Snima jednu "hero" sliku scene iz referentne kamere kao PNG, uz dugo
+# zagrijavanje da se volumetrijska magla stigne stabilizirati.
 
 var _out: String = "user://hero_shot.png"
 var _warmup: int = 120
@@ -42,8 +23,6 @@ func _initialize() -> void:
 	_root_node = packed.instantiate()
 	root.add_child(_root_node)
 
-	# The player captures the mouse and draws a HUD; neither belongs in a
-	# composition check. The route audit would drive the player around.
 	for n in ["Player", "RouteAudit"]:
 		var d := _root_node.get_node_or_null(n)
 		if d:
@@ -57,11 +36,9 @@ func _initialize() -> void:
 		quit(3)
 		return
 	if cam.get_script() != null:
-		cam.set_script(null)          # drop the H-toggle, nothing to toggle to
+		cam.set_script(null)
 	cam.current = true
 
-	# Without this every frame-time reading is pinned at the refresh rate and
-	# the "under 16 ms" check would pass by definition.
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 
 	print("hero_shot: out=%s warmup=%d overrides=%s" % [_out, _warmup, str(_overrides)])
@@ -95,7 +72,7 @@ func _apply_overrides() -> void:
 		return
 	var we := _root_node.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if we and we.environment:
-		var e: Environment = we.environment.duplicate(true)   # don't touch the .tres on disk
+		var e: Environment = we.environment.duplicate(true)
 		we.environment = e
 		if _overrides.has("exposure"):       e.tonemap_exposure = _overrides["exposure"]
 		if _overrides.has("fog_density"):    e.volumetric_fog_density = _overrides["fog_density"]
@@ -105,7 +82,6 @@ func _apply_overrides() -> void:
 		if _overrides.has("fog_off"):        e.volumetric_fog_enabled = false
 		if _overrides.has("glow_off"):       e.glow_enabled = false
 	if _overrides.has("hide_water"):
-		# Diagnostic: is a bright artefact ON the water, or BEHIND it?
 		var surf := _find(_root_node, "WATER_Pool_Surface")
 		if surf is GeometryInstance3D:
 			(surf as GeometryInstance3D).visible = false
@@ -122,8 +98,6 @@ func _process(_delta: float) -> bool:
 	if _done:
 		return true
 	_frames += 1
-	# Ignore the first half of the warm-up: shader compilation and the
-	# volumetric fog converging are not representative of steady state.
 	if _frames > _warmup / 2:
 		_deltas.append(_delta)
 	if _frames >= _warmup and not _fired:
@@ -133,8 +107,6 @@ func _process(_delta: float) -> bool:
 
 
 func _capture() -> void:
-	# One more full frame so the capture is of a finished image, not a
-	# half-composited one.
 	await RenderingServer.frame_post_draw
 	var tex := root.get_texture()
 	if tex == null:
@@ -154,9 +126,6 @@ func _capture() -> void:
 	_done = true
 
 
-## G2's done-when includes "frame time stays under 16 ms", and the hero view is
-## the most expensive thing in the scene, so this is the right place to measure
-## it. Reported as mean / 95th percentile / worst over the steady-state frames.
 func _report_frame_time() -> void:
 	if _deltas.is_empty():
 		return

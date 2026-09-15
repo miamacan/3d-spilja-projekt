@@ -1,13 +1,6 @@
 extends Camera3D
-##
-## Hero-view check camera. Press H in game to jump between the player's eyes and
-## MARK_HeroView, so the composition can be compared against
-## reference/cave_ref_hero.png without moving the player.
-##
-## Also prints the frame time while the hero view is active, because the G2
-## done-when includes "frame time stays under 16 ms" and this is the view that
-## costs the most.
-##
+# Referentna kamera - tipka H prebacuje pogled s igrača na fiksnu poziciju,
+# radi usporedbe s referentnom fotografijom. Ispisuje i vrijeme po sličici.
 
 @export var player_cam_path: NodePath = ^"../Player/Player/Head/Camera3D"
 @export var toggle_keycode: Key = KEY_H

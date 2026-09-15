@@ -1,11 +1,6 @@
 extends SceneTree
-## Shoots the cave mouth from inside the chamber. Doorway is at Godot z ~= 21.0
-## (Blender y = -21); the chamber runs from there back to z = -15.6.
-##
-## NOTE: the camera is placed with an explicit _applied flag, NOT with a
-## "if _pt < small" gate. The frame after a PNG save has a delta of several
-## hundred ms, so such a gate silently never fires and every shot comes back
-## from the previous camera.
+# Snima nekoliko referentnih kadrova ulaza u špilju iz raznih kutova,
+# za usporedbu s pravom fotografijom.
 
 var _out := "user://"
 var _tag := "x"

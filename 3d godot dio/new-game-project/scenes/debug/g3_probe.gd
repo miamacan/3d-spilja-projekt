@@ -1,19 +1,6 @@
 extends SceneTree
-##
-## G3 acceptance test: drop a rock into the pool and prove the splash, the
-## ring and the ripple actually happen.
-##
-##   Godot --path <project> --rendering-driver d3d12 --resolution 1600x900 \
-##         --script res://scenes/debug/g3_probe.gd -- --out-dir C:/some/dir
-##
-## Runs windowed, like hero_shot.gd, because --headless renders black.
-##
-## Captures four frames -- just before impact and at +0.15 s, +0.5 s, +1.2 s --
-## and prints a JSON line of the state it observed. It does NOT trust the visual
-## alone: it checks that the surface got a ShaderMaterial, that ripple_count
-## actually rose, and that a Splash node was spawned, so a black frame or a
-## silently-missing collision shape cannot read as a pass.
-##
+# G3 test: baci kamen u jezero i provjeri je li se pljusak, val i krug
+# stvarno dogodili - ne samo vizualno, provjerava se i unutarnje stanje.
 
 var _out_dir := "user://"
 var _t := 0.0
@@ -21,7 +8,7 @@ var _frames := 0
 var _drop_at := 2.0
 var _dropped := false
 var _impact_t := -1.0
-var _shots: Array = []          # [{at_offset, done}]
+var _shots: Array = []
 var _main: Node
 var _water: Node
 var _rock: RigidBody3D
@@ -53,21 +40,11 @@ func _initialize() -> void:
 	_log["volume_shape"] = vol != null and vol.get_node_or_null("Shape") != null
 	_log["probe"] = _water != null and _water.get_node_or_null("Probe") != null
 
-	# A camera across the pool, looking at where the rock will land.
 	var cam := Camera3D.new()
 	cam.fov = 70.0
 	cam.near = 0.05
 	cam.far = 300.0
 	_main.add_child(cam)
-	# look_at() requires the node to be inside the tree, and during
-	# _initialize() the root window is not yet -- same trap as the G2
-	# global_transform bug. look_at_from_position sets the transform directly.
-	# MARK_ThrowSpot is (-2.2, 5.60, 5.0) in Godot space; + 1.7 m of eye height.
-	# This is literally where the player stands to throw. The previous guess,
-	# (-1.8, 4.2, 6.5), was INSIDE the outcrop -- the crest is at y 5.5 -- and
-	# rendered a wall of black rock. Same lesson matcheck.py records on the
-	# Blender side: do not hand-place a close camera without checking it is in
-	# open air.
 	cam.look_at_from_position(Vector3(-2.2, 7.3, 5.0), Vector3(3.0, 0.0, -1.0), Vector3.UP)
 	cam.current = true
 	_log["cam_basis_ok"] = not cam.transform.basis.is_equal_approx(Basis())
@@ -90,7 +67,6 @@ func _process(delta: float) -> bool:
 	if not _dropped and _t >= _drop_at:
 		_drop()
 
-	# the "before" shot is timed off the predicted impact, the rest off the real one
 	if _impact_t < 0.0 and _dropped:
 		_check_impact()
 
@@ -99,7 +75,7 @@ func _process(delta: float) -> bool:
 			continue
 		var due := -1.0
 		if String(s["name"]) == "a_before":
-			due = _drop_at + 0.45          # rock in the air, water still
+			due = _drop_at + 0.45
 		elif _impact_t >= 0.0:
 			due = _impact_t + float(s["at"])
 		if due >= 0.0 and _t >= due and not _busy:

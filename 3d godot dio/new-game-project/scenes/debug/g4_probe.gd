@@ -1,23 +1,6 @@
 extends SceneTree
-##
-## G4 acceptance test.
-##
-##   Godot --path <project> --rendering-driver d3d12 --resolution 1600x900 \
-##         --script res://scenes/debug/g4_probe.gd -- --out-dir C:/some/dir
-##
-## "Throwing feels like throwing" is not directly measurable, so this measures
-## the four things that make it true or false, and screenshots the rest:
-##
-##   1. CHARGE  -- hold time maps onto launch speed as specified (0.3-1.2 s
-##                 -> 6-16 m/s), including the clamps at both ends.
-##   2. WEIGHT  -- the rock actually leaves at the commanded speed, and its
-##                 flight matches a ballistic arc under project gravity.
-##   3. BOUNCE  -- it retains speed after hitting rock instead of stopping dead.
-##   4. SPAM    -- 40 throws in quick succession: frame time and the live cap.
-##
-## Plus a splash check, since a rock in the pool is G3's path and this proves
-## the two phases still talk to each other.
-##
+# G4 test: provjerava da bacanje kamena radi kako treba - nabijanje,
+# brzina, odskakivanje, i da sve i dalje radi kad se baci puno kamenja odjednom.
 
 var _out_dir := "user://"
 var _t := 0.0
@@ -57,8 +40,6 @@ func _initialize() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	_main = packed.instantiate()
 	root.add_child(_main)
-	# player.gd parents thrown rocks under current_scene; setting it makes the
-	# probe match the real game rather than falling back to get_parent().
 	current_scene = _main
 	var ra := _main.get_node_or_null("RouteAudit")
 	if ra:
@@ -105,23 +86,17 @@ func _next() -> void:
 	_phase_t = 0.0
 
 
-# --- 0: let the player land and the fog settle -------------------------------
-
 func _p0_settle() -> void:
 	if _phase_t < 2.0:
 		return
 	if _player != null:
-		# Stand on the throw spot, facing the pool, so every throw below starts
-		# from the same place the brief describes.
-		_player.set("auto_control", true)          # no input, no mouse look
+		_player.set("auto_control", true)
 		_player.call("teleport_to", Vector3(-2.2, 5.9, 5.0))
 		var p: Node3D = _player
 		p.rotation.y = atan2(-(3.0 - -2.2), -(-1.0 - 5.0))
 		_log["player_pos"] = str((_player as Node3D).global_position)
 	_next()
 
-
-# --- 1: charge -> speed, a pure function --------------------------------------
 
 func _p1_charge_map() -> void:
 	if _player == null:
@@ -132,23 +107,16 @@ func _p1_charge_map() -> void:
 		rows[str(hold)] = snappedf(float(_player.call("_charge_speed")), 0.01)
 	_player.set("_charge", 0.0)
 	_log["charge_map"] = rows
-	# the brief's endpoints, exactly
-	# str(0.0) is "0.0", not "0" -- .get() with a default so a key typo can never
-	# throw and stall the whole probe again.
 	_log["charge_ok"] = (absf(float(rows.get("0.3", -1)) - 6.0) < 0.01
 		and absf(float(rows.get("1.2", -1)) - 16.0) < 0.01
-		and absf(float(rows.get("0.0", -1)) - 6.0) < 0.01     # tap still throws
-		and absf(float(rows.get("2.0", -1)) - 16.0) < 0.01)   # over-hold gains nothing
+		and absf(float(rows.get("0.0", -1)) - 6.0) < 0.01
+		and absf(float(rows.get("2.0", -1)) - 16.0) < 0.01)
 	_next()
 
-
-# --- 2: one full-charge throw -------------------------------------------------
 
 func _p2_throw() -> void:
 	if _player == null:
 		_next(); return
-	# Hold the charge for a moment first so the viewmodel has lifted, grab that
-	# frame, and only then release.
 	if not _charged_for_shot:
 		_charged_for_shot = true
 		_player.call("_begin_charge")
@@ -161,7 +129,6 @@ func _p2_throw() -> void:
 		return
 	_player.set("_charge", 1.2)
 	_player.call("_release_charge")
-	# newest rock in the scene
 	for c in _main.get_children():
 		if c is RigidBody3D and c.is_in_group("rock"):
 			_tracked = c
@@ -184,8 +151,6 @@ func _p2_throw() -> void:
 	_next()
 
 
-# --- 3: watch the arc, and the first bounce -----------------------------------
-
 func _p3_track() -> void:
 	if _tracked == null or not is_instance_valid(_tracked):
 		_log["track"] = "rock gone"
@@ -193,12 +158,8 @@ func _p3_track() -> void:
 	var v := _tracked.linear_velocity.length()
 	var y := _tracked.global_position.y
 	_apex = maxf(_apex, y)
-	# snappedf(x, 2) would round to multiples of TWO, not to 2 decimals.
 	_samples.append({"t": snappedf(_phase_t, 0.001), "v": snappedf(v, 0.01), "y": snappedf(y, 0.01)})
 
-	# The impulse lands on the next PHYSICS step, which is not this render
-	# frame, so the first samples legitimately read zero. Take the first
-	# non-zero reading as the launch speed.
 	if not _log.has("launch_speed") and v > 0.01:
 		_log["launch_speed"] = snappedf(v, 0.01)
 
@@ -210,16 +171,6 @@ func _p3_track() -> void:
 		_next()
 
 
-# --- 4: bounce, on rock rather than water -------------------------------------
-#
-# The thrown rock above lands in the POOL -- the player is facing it, which is
-# the whole point of the scene -- and water.gd damps it smoothly, so there is no
-# bounce to measure there. This drops one straight onto the outcrop crest
-# instead, which is solid limestone at a known height, and watches for the
-# vertical velocity to change sign. That is unambiguous in a way that "speed
-# changed a lot between two frames" is not: the first version of this test
-# reported a bounce off quantisation noise.
-
 func _p4_bounce() -> void:
 	if _bouncer == null:
 		var ps: PackedScene = load("res://scenes/rock/Rock.tscn")
@@ -227,7 +178,6 @@ func _p4_bounce() -> void:
 			_next(); return
 		_bouncer = ps.instantiate() as RigidBody3D
 		_main.add_child(_bouncer)
-		# straight down onto MARK_ThrowSpot, the outcrop crest at y 5.60
 		_bouncer.global_position = Vector3(-2.2, 9.2, 5.0)
 		_bouncer.linear_velocity = Vector3(0, -8.0, 0)
 		_b_prev_vy = -8.0
@@ -252,21 +202,15 @@ func _p4_bounce() -> void:
 		_next()
 
 
-# --- 5: spam ------------------------------------------------------------------
-
 func _p4_spam() -> void:
 	if _player == null:
 		_next(); return
-	# Bypass the 0.4 s cooldown deliberately: the point is to find out what
-	# happens when the cap and the physics are pushed, not to re-test the
-	# cooldown.
 	if _spam.size() < 40 and fmod(_phase_t, 0.05) < 0.03:
 		_player.set("_charge", randf_range(0.3, 1.2))
 		_player.call("_spawn_rock", float(_player.call("_charge_speed")))
 		_spam.append(1)
 	if _phase_t > 0.6:
 		_spam_frames.append(_last_delta * 1000.0)
-	# mid-flight, while the rocks are still in the air and visible
 	if _phase_t > 1.3:
 		_shoot("b_spam")
 	if _phase_t > 3.2:
@@ -287,8 +231,6 @@ func _p4_spam() -> void:
 		_next()
 
 
-# --- 5: into the pool ---------------------------------------------------------
-
 func _p5_water() -> void:
 	if _player == null or _water == null:
 		_next(); return
@@ -296,7 +238,6 @@ func _p5_water() -> void:
 		_water_rock_spawned = true
 		var holder := _water.get_node_or_null("Splashes")
 		_log["splashes_before"] = holder.get_child_count() if holder else -1
-		# lob one straight into the pool
 		var ps: PackedScene = load("res://scenes/rock/Rock.tscn")
 		var r := ps.instantiate() as RigidBody3D
 		_main.add_child(r)
@@ -314,8 +255,6 @@ func _p5_water() -> void:
 			_log["ripple_count_after"] = (surf.material_override as ShaderMaterial).get_shader_parameter("ripple_count")
 		_next()
 
-
-# --- helpers ------------------------------------------------------------------
 
 func _shoot(nm: String) -> void:
 	if _shot_taken.has(nm):

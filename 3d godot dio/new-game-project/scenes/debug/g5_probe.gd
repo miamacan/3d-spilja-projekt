@@ -1,22 +1,6 @@
 extends SceneTree
-##
-## G5 acceptance test.
-##
-##   Godot --path <project> --rendering-driver d3d12 --resolution 1600x900 \
-##         --script res://scenes/debug/g5_probe.gd -- --out-dir C:/some/dir
-##
-## The done-when is three claims; this checks each one so it cannot be taken on
-## faith from a pretty screenshot:
-##
-##   "moss sits where Blender's mask says"  -- counts how many rock materials
-##       got the shader, confirms each carries its OWN baked ORM (not a shared
-##       one), and renders the mask flat via debug_mask so coverage can be
-##       measured off the image rather than inferred from a lit render.
-##   "vines aren't hard-edged"              -- confirms the leaf material is
-##       alpha-scissor, cull-disabled, backlit, and carries the atlas.
-##   "the god rays have motes"              -- confirms the emitter, its count,
-##       and screenshots the hero view.
-##
+# G5 test: provjerava da je mahovina na pravim mjestima, da lišće ima
+# meke rubove (ne oštre), i da prašina u svjetlosnom snopu postoji.
 
 var _out_dir := "user://"
 var _t := 0.0
@@ -85,8 +69,6 @@ func _next() -> void:
 	_phase_t = 0.0
 
 
-# --- 0: what actually got applied ---------------------------------------------
-
 func _p0_inspect() -> void:
 	if _phase_t < 2.5:
 		return
@@ -94,8 +76,6 @@ func _p0_inspect() -> void:
 	if _foliage != null and _foliage.has_method("get_report"):
 		_log["foliage_applied"] = _foliage.call("get_report")
 
-	# every rock mesh: did it get a ShaderMaterial, and does it carry its OWN
-	# baked macro map? A shared ORM would mean the per-mesh bakes were lost.
 	var rocks := {}
 	var leaves := 0
 	var leaf_ok := {}
@@ -149,8 +129,6 @@ func _scan(n: Node, rocks: Dictionary, leaf_ok: Dictionary) -> void:
 		_scan(c, rocks, leaf_ok)
 
 
-# --- 1-3: shots ----------------------------------------------------------------
-
 func _p1_hero() -> void:
 	if _phase_t < 2.5:
 		return
@@ -175,8 +153,6 @@ func _p3_closeup() -> void:
 	if _cam == null:
 		_next(); return
 	if _phase_t < 0.1:
-		# Looking down at the outcrop crest, which carries the strongest mask in
-		# the scene, from open air above and in front of it.
 		_cam.look_at_from_position(Vector3(-2.4, 8.6, 10.2), Vector3(-2.2, 5.4, 4.6), Vector3.UP)
 		_cam.fov = 50.0
 		return

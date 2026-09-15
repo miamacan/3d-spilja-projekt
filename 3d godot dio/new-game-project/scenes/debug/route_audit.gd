@@ -1,42 +1,21 @@
 extends Node3D
-
-## G1 route auditor.
-##
-## Drives the real player capsule through a list of waypoints using the real
-## move_and_slide() against the real -colonly meshes, and logs every place it
-## gets stuck, floats, falls through, hits a step it cannot climb, or runs out
-## of headroom. Writes the report to res://route_audit.txt (editor) and
-## user://route_audit.txt, and prints it to the Output panel.
-##
-## Waypoints are authored in the Env node's LOCAL space, which is the same as
-## the exported glTF space, so they stay correct even if the Env instance gets
-## moved in the editor. Blender (bx, by, bz)  ->  here (bx, bz, -by).
-##
-## F4 re-runs the audit. Any movement key aborts it and hands control back.
+# G1 test prohodnosti - vodi igrača kroz niz točaka pravom fizikom i
+# bilježi gdje zapinje, propada, ili ne može preći. Tipka F4 pokreće
+# test ponovno.
 
 @export var run_on_start := true
 @export var player_path: NodePath = ^"../Player/Player"
 @export var env_path: NodePath = ^"../Env"
 
 @export_group("Thresholds")
-## Horizontal distance at which a waypoint counts as reached.
 @export var arrive_radius := 1.0
-## Give up on a leg after this many seconds.
 @export var leg_timeout := 35.0
-## Window over which progress toward the target is measured.
 @export var stuck_window := 1.2
-## Less horizontal progress than this over the window = stuck.
 @export var stuck_progress := 0.15
-## Airborne for longer than this with near-zero vertical speed = floating.
 @export var float_window := 0.6
-## Below this world Y the capsule has fallen out of the level.
 @export var fall_below_y := -8.0
-## Capsule height. Anything closer than this above the feet is a low ceiling.
 @export var headroom_min := 1.9
-## Upward jump in one physics tick, while grounded, that counts as a step.
 @export var step_report := 0.30
-## The brief's walkable-slope cap. Anything above this is a Blender-side
-## finding even when the capsule gets up it, because floor_max_angle is 42.
 @export var slope_spec_deg := 40.0
 
 @export_group("Output")
@@ -44,30 +23,30 @@ extends Node3D
 
 const ROUTES := {
 	"A  spawn -> tunnel -> cave mouth -> outcrop crest": [
-		Vector3(-3.00, 5.52, 29.00),  # MARK_PlayerSpawn
-		Vector3(-2.60, 5.49, 25.50),  # clearing, in front of the mouth
-		Vector3(-1.20, 5.48, 23.20),  # tunnel entry
-		Vector3(-0.20, 5.48, 22.00),  # tunnel
-		Vector3( 0.00, 5.50, 21.00),  # ENT_Tunnel / CAVE_Shell collision seam
+		Vector3(-3.00, 5.52, 29.00),
+		Vector3(-2.60, 5.49, 25.50),
+		Vector3(-1.20, 5.48, 23.20),
+		Vector3(-0.20, 5.48, 22.00),
+		Vector3( 0.00, 5.50, 21.00),
 		Vector3( 0.00, 5.55, 18.50),
-		Vector3( 0.00, 5.55, 14.00),  # cave mouth, MARK_HeroView ground
+		Vector3( 0.00, 5.55, 14.00),
 		Vector3(-0.50, 5.41, 11.00),
-		Vector3(-1.50, 5.39,  8.00),  # onto LEDGE_Outcrop
-		Vector3(-2.20, 5.60,  5.00),  # MARK_ThrowSpot
+		Vector3(-1.50, 5.39,  8.00),
+		Vector3(-2.20, 5.60,  5.00),
 	],
 	"B  crest -> west ramp -> talus -> beach": [
 		Vector3(-2.20, 5.60,  5.00),
 		Vector3(-1.50, 5.39,  8.00),
-		Vector3(-2.25, 5.10, 11.00),  # head of the west ramp
+		Vector3(-2.25, 5.10, 11.00),
 		Vector3(-3.00, 4.70, 11.00),
 		Vector3(-4.50, 4.10, 11.00),
-		Vector3(-5.25, 3.80, 11.00),  # ramp foot
-		Vector3(-5.25, 3.50,  8.50),  # talus - heights measured in run 1
+		Vector3(-5.25, 3.80, 11.00),
+		Vector3(-5.25, 3.50,  8.50),
 		Vector3(-4.80, 3.30,  8.00),
 		Vector3(-5.25, 1.20,  5.80),
-		Vector3(-6.00, 0.30,  3.50),  # beach shelf at Z = +0.3
-		Vector3(-7.20, 0.30,  2.60),  # west along the beach
-		Vector3(-5.20, 0.30,  1.60),  # south along the beach
+		Vector3(-6.00, 0.30,  3.50),
+		Vector3(-7.20, 0.30,  2.60),
+		Vector3(-5.20, 0.30,  1.60),
 	],
 	"C  beach -> back up the talus -> crest (the climb)": [
 		Vector3(-6.00, 0.30,  3.50),
@@ -79,7 +58,7 @@ const ROUTES := {
 		Vector3(-3.00, 4.70, 11.00),
 		Vector3(-2.25, 5.10, 11.00),
 		Vector3(-1.50, 5.39,  8.00),
-		Vector3(-2.20, 5.60,  5.00),  # MARK_ThrowSpot
+		Vector3(-2.20, 5.60,  5.00),
 	],
 	"D  loop the clearing -> back to the mouth": [
 		Vector3(-3.00, 5.52, 29.00),
@@ -222,10 +201,6 @@ func _fmt(p: Vector3) -> String:
 	return "at (%.2f, %.2f, %.2f)" % [p.x, p.y, p.z]
 
 
-## Names of everything the capsule is currently pushing against.
-## -colonly bodies carry the mesh name; -convcol bodies are a generic
-## "StaticBody3D" under the visual MeshInstance3D, so walk up one level and
-## report the parent too, otherwise a boulder is indistinguishable from a wall.
 func _colliders() -> String:
 	var names: Array[String] = []
 	for i in _player.get_slide_collision_count():
@@ -275,7 +250,6 @@ func _physics_process(delta: float) -> void:
 	_leg_t += delta
 	_win_t += delta
 
-	# --- fell out of the level -------------------------------------------------
 	if pos.y < fall_below_y:
 		_issue("FELL-THROUGH", "left the level below y=%.1f, last ground %s" % [
 			fall_below_y, _fmt(_last_grounded)])
@@ -283,7 +257,6 @@ func _physics_process(delta: float) -> void:
 		_next_waypoint()
 		return
 
-	# --- floating / airborne ---------------------------------------------------
 	if _player.is_on_floor():
 		_air_t = 0.0
 		_last_grounded = pos
@@ -297,13 +270,11 @@ func _physics_process(delta: float) -> void:
 		if _air_t > float_window and absf(_player.velocity.y) < 0.6:
 			_issue("FLOATING", "airborne %.1f s with vy %.2f %s" % [_air_t, _player.velocity.y, _fmt(pos)])
 
-	# --- headroom --------------------------------------------------------------
 	var head := _headroom()
 	_leg_min_head = minf(_leg_min_head, head)
 	if head < headroom_min:
 		_issue("LOW-CEILING", "%.2f m of headroom %s" % [head, _fmt(pos)])
 
-	# --- steering --------------------------------------------------------------
 	var to := target - pos
 	to.y = 0.0
 	var d := to.length()
@@ -317,7 +288,6 @@ func _physics_process(delta: float) -> void:
 
 	_player.auto_wish_dir = to / d
 
-	# --- stuck -----------------------------------------------------------------
 	if _win_t >= stuck_window:
 		if (_win_dist - d) < stuck_progress:
 			_issue("STUCK", "%.2f m of progress in %.1f s, %.1f m short of wp %d %s, touching %s" % [
@@ -325,7 +295,6 @@ func _physics_process(delta: float) -> void:
 		_win_t = 0.0
 		_win_dist = d
 
-	# --- timeout ---------------------------------------------------------------
 	if _leg_t > leg_timeout:
 		_issue("UNREACHABLE", "gave up after %.0f s, %.1f m short of wp %d %s" % [
 			_leg_t, d, _wp_i, _fmt(pos)])

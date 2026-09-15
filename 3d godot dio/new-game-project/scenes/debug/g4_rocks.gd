@@ -1,19 +1,6 @@
 extends SceneTree
-##
-## G4 — builds the throwable rock and its dust puff, and cleans the provisional
-## G3 thrower out of main.tscn.
-##
-##   Godot --headless --path <project> --script res://scenes/debug/g4_rocks.gd
-##
-## Writes scenes/_main_g4_candidate.tscn; the caller verifies and promotes.
-##
-## Produces:
-##   scenes/rock/rock_mesh_1..3.res   80-tri faceted pebbles, generated
-##   scenes/rock/M_RockPebble.tres    limestone, triplanar (no UVs needed)
-##   scenes/rock/M_RockViewmodel.tres same + a little emission, see below
-##   scenes/rock/Rock.tscn
-##   scenes/fx/Dust.tscn
-##
+# G4 faza: gradi kamen za bacanje i njegovu prašinu, i briše privremeni
+# sustav bacanja iz G3 faze.
 
 const CANDIDATE := "res://scenes/_main_g4_candidate.tscn"
 const MAIN := "res://scenes/main.tscn"
@@ -27,8 +14,6 @@ const MAT_VIEWMODEL := "res://scenes/rock/M_RockViewmodel.tres"
 const TEX_BC := "res://assets/env/cave_env_T_Limestone_BC.png"
 const TEX_ORM := "res://assets/env/cave_env_T_Limestone_ORM.png"
 
-## Brief: SphereShape3D r 0.06. The meshes are built a shade under that so the
-## faceted silhouette sits inside the collider rather than poking through it.
 const ROCK_RADIUS := 0.058
 
 var _msgs: Array = []
@@ -49,8 +34,6 @@ func _initialize() -> void:
 		push_error("G4: root is not Main")
 		quit(3); return
 
-	# The G3 thrower was explicitly provisional; G4 is the real one and it lives
-	# in player.gd, so the node goes.
 	var old := root.get_node_or_null("RockThrower")
 	if old != null:
 		root.remove_child(old)
@@ -77,10 +60,6 @@ func _say(s: String) -> void:
 	_msgs.append(s)
 
 
-# -----------------------------------------------------------------------------
-# materials
-# -----------------------------------------------------------------------------
-
 func _build_materials() -> void:
 	var bc: Texture2D = ResourceLoader.load(TEX_BC)
 	var orm: Texture2D = ResourceLoader.load(TEX_ORM)
@@ -97,39 +76,18 @@ func _build_materials() -> void:
 	m.ao_texture = orm
 	m.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 	m.metallic = 0.0
-	# Triplanar, so the generated meshes need no UVs and no tangents -- which is
-	# also why there is no normal map here. On a 12 cm pebble it would add
-	# nothing, and wiring one without tangents is how you get wrong shading.
 	m.uv1_triplanar = true
 	m.uv1_scale = Vector3(3.0, 3.0, 3.0)
 	_save(m, MAT_PEBBLE, "M_RockPebble")
 
-	# The viewmodel sits 52 cm from the camera in a cave whose whole point is
-	# that it is dark. Lit correctly it is invisible. A little emission is the
-	# cheap fix; the alternative is a second viewport and a dedicated light,
-	# which is a lot of machinery for "no arm, no animation rig -- it's enough".
 	var v := m.duplicate() as StandardMaterial3D
 	v.emission_enabled = true
 	v.emission = Color(0.62, 0.60, 0.55)
-	# 0.18 blew out to flat white: the scene is tonemapped AgX at exposure 2.6,
-	# which amplifies a constant emission far more than it looks like it should.
-	# Enough to read the silhouette in a dark cave, not enough to glow.
 	v.emission_energy_multiplier = 0.05
 	v.emission_texture = bc
 	_save(v, MAT_VIEWMODEL, "M_RockViewmodel")
 
 
-# -----------------------------------------------------------------------------
-# meshes
-# -----------------------------------------------------------------------------
-
-## A subdivided icosahedron, displaced by a smooth function of DIRECTION and
-## flat-shaded. 20 faces * 4 = 80 tris, comfortably inside the brief's 300.
-##
-## Displacing by direction rather than by vertex index is what keeps the mesh
-## watertight without a shared-vertex table: two triangles meeting on an edge
-## compute the same normalised midpoint from the same two corners, so they get
-## byte-identical displacement and there is no crack.
 func _build_meshes() -> void:
 	var t := (1.0 + sqrt(5.0)) / 2.0
 	var v: Array[Vector3] = [
@@ -168,8 +126,6 @@ func _build_meshes() -> void:
 				for d in tri:
 					st.add_vertex(_shape(d, cfg["seed"], cfg["amp"], cfg["squash"]))
 				tris += 1
-		# No index() call: vertices stay unshared, so generate_normals() gives
-		# per-face normals and the pebble reads as faceted low-poly rock.
 		st.generate_normals()
 		var mesh := st.commit()
 		var path := "res://scenes/rock/rock_mesh_%d.res" % (n + 1)
@@ -184,10 +140,6 @@ func _shape(d: Vector3, seed: float, amp: float, squash: Vector3) -> Vector3:
 	n += sin(d.z * 8.7 + s * 0.7) * cos(d.x * 7.3 - s) * 0.2
 	return d * (ROCK_RADIUS * (1.0 + n * amp)) * squash
 
-
-# -----------------------------------------------------------------------------
-# Dust.tscn
-# -----------------------------------------------------------------------------
 
 func _build_dust() -> void:
 	var root := Node3D.new()
@@ -205,7 +157,6 @@ func _build_dust() -> void:
 	pm.spread = 62.0
 	pm.initial_velocity_min = 0.35
 	pm.initial_velocity_max = 1.15
-	# Dust hangs; it does not fall like a droplet.
 	pm.gravity = Vector3(0, -1.6, 0)
 	pm.damping_min = 0.8
 	pm.damping_max = 1.8
@@ -247,28 +198,17 @@ func _build_dust() -> void:
 	_verify(DUST_SCENE, ["Particles", "dust.gd"])
 
 
-# -----------------------------------------------------------------------------
-# Rock.tscn
-# -----------------------------------------------------------------------------
-
 func _build_rock() -> void:
 	var rb := RigidBody3D.new()
 	rb.name = "Rock"
 	rb.mass = 0.3
-	# contact_monitor + max_contacts_reported are what make body_entered fire on
-	# a RigidBody3D at all. Without both, rock.gd's impact handler never runs and
-	# every throw is silent.
 	rb.contact_monitor = true
 	rb.max_contacts_reported = 4
-	# Layer 3. Mask 1|4: world AND other rocks, but NOT the player's layer 2 --
-	# a thrown rock should not shove the thrower.
 	rb.collision_layer = 4
 	rb.collision_mask = 1 | 4
 	rb.continuous_cd = true
 	rb.add_to_group("rock", true)
 
-	# "bounce off walls" is in the done-when, and Godot's default bounce is 0:
-	# without this the rock arrives and simply stops dead.
 	var phys := PhysicsMaterial.new()
 	phys.bounce = 0.32
 	phys.friction = 0.7
@@ -309,10 +249,6 @@ func _build_rock() -> void:
 						 "contact_monitor", "PhysicsMaterial"])
 
 
-# -----------------------------------------------------------------------------
-# helpers
-# -----------------------------------------------------------------------------
-
 func _save(res: Resource, path: String, label: String) -> void:
 	var d := path.get_base_dir()
 	if not DirAccess.dir_exists_absolute(d):
@@ -336,8 +272,6 @@ func _save_scene(root: Node, path: String, label: String) -> void:
 	_say("%s -> %s %s" % [label, path, "OK" if s == OK else "ERR %d" % s])
 
 
-## Read the file back and check the names that must be in it. An unowned child
-## is dropped by pack() with no error at save time -- see HANDOFF_GODOT.md §9.
 func _verify(path: String, tokens: Array) -> void:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:

@@ -1,16 +1,6 @@
 extends SceneTree
-##
-## G5 — builds the dust-mote and drip emitters and wires the foliage script,
-## the motes and the drips into main.tscn.
-##
-##   Godot --headless --path <project> --script res://scenes/debug/g5_env.gd
-##
-## Writes scenes/_main_g5_candidate.tscn; the caller verifies and promotes.
-##
-## The moss and leaf MATERIALS are not built here -- scenes/env/foliage.gd
-## applies those at runtime, because they land on meshes inside the instanced
-## cave_env.glb where pack() will not keep an override (HANDOFF_GODOT.md §4).
-##
+# G5 faza: gradi prašinu u svjetlosnom snopu i kapi vode, i uvodi shader
+# mahovine u glavnu scenu.
 
 const CANDIDATE := "res://scenes/_main_g5_candidate.tscn"
 const MAIN := "res://scenes/main.tscn"
@@ -20,7 +10,6 @@ const FOLIAGE_GD := "res://scenes/env/foliage.gd"
 const DRIPS_GD := "res://scenes/fx/drips.gd"
 const MOTE_TEX := "res://assets/textures/T_Mote.png"
 
-# MARK_Skylight, measured: origin and the direction light travels.
 const SUN_POS := Vector3(-2.53, 30.3688, -7.68)
 const SUN_DIR := Vector3(0.4198, -0.8896, 0.1799)
 
@@ -63,7 +52,6 @@ func _say(s: String) -> void:
 	_msgs.append(s)
 
 
-## Orthonormal basis whose -Z points along `dir`, as in g2_lighting.gd.
 func _basis_facing(dir: Vector3) -> Basis:
 	var z := (-dir).normalized()
 	var up := Vector3.UP
@@ -74,19 +62,9 @@ func _basis_facing(dir: Vector3) -> Basis:
 	return Basis(x, y, z)
 
 
-# -----------------------------------------------------------------------------
-# Motes.tscn
-# -----------------------------------------------------------------------------
-
 func _build_motes() -> void:
-	# The emitter box is ROTATED onto the light direction rather than being an
-	# axis-aligned block over the chamber. An axis-aligned box big enough to
-	# contain the shaft also contains most of the room, and additive motes are
-	# visible wherever they are -- they are not actually gated by the fog, the
-	# brief's reasoning notwithstanding. Confining them to a 6 x 6 x 34 m column
-	# along the ray is what makes them read as "dust in the beam".
 	var to_y := 2.0
-	var t := (SUN_POS.y - to_y) / SUN_DIR.y * -1.0        # distance along the ray
+	var t := (SUN_POS.y - to_y) / SUN_DIR.y * -1.0
 	var far := SUN_POS + SUN_DIR * t
 	var mid := (SUN_POS + far) * 0.5
 
@@ -98,21 +76,19 @@ func _build_motes() -> void:
 	p.one_shot = false
 	p.explosiveness = 0.0
 	p.randomness = 1.0
-	# Without preprocess the beam is empty for the first 16 seconds and then
-	# fills -- which is exactly the window a screenshot lands in.
 	p.preprocess = 16.0
-	p.fixed_fps = 20            # dust does not need 60 Hz simulation
+	p.fixed_fps = 20
 	p.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
 	p.visibility_aabb = AABB(Vector3(-12, -12, -24), Vector3(24, 24, 48))
 
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = Vector3(3.0, 3.0, 17.0)     # half-extents, local
+	pm.emission_box_extents = Vector3(3.0, 3.0, 17.0)
 	pm.direction = Vector3(0, 1, 0)
 	pm.spread = 180.0
 	pm.initial_velocity_min = 0.02
 	pm.initial_velocity_max = 0.10
-	pm.gravity = Vector3(0, -0.035, 0)                    # barely sinking
+	pm.gravity = Vector3(0, -0.035, 0)
 	pm.scale_min = 0.5
 	pm.scale_max = 1.6
 	pm.color = Color(1.0, 0.97, 0.90, 1.0)
@@ -142,10 +118,6 @@ func _build_motes() -> void:
 	_say("motes: 300 in a 6x6x34 m column along the ray, centred %v" % mid)
 
 
-# -----------------------------------------------------------------------------
-# Drip.tscn
-# -----------------------------------------------------------------------------
-
 func _build_drip() -> void:
 	var p := GPUParticles3D.new()
 	p.name = "Drip"
@@ -155,8 +127,6 @@ func _build_drip() -> void:
 	p.explosiveness = 0.0
 	p.randomness = 0.9
 	p.preprocess = 1.0
-	# Stretches each quad along its velocity, which is what turns a dot into a
-	# falling streak without needing an animated sprite.
 	p.transform_align = GPUParticles3D.TRANSFORM_ALIGN_Y_TO_VELOCITY
 	p.visibility_aabb = AABB(Vector3(-1, -14, -1), Vector3(2, 16, 2))
 
@@ -188,12 +158,7 @@ func _build_drip() -> void:
 	_verify(DRIP_SCENE, ["GPUParticles3D", "ParticleProcessMaterial"])
 
 
-# -----------------------------------------------------------------------------
-# main.tscn
-# -----------------------------------------------------------------------------
-
 func _wire(root: Node) -> void:
-	# --- Foliage
 	var f := root.get_node_or_null("Foliage")
 	if f == null:
 		f = Node3D.new()
@@ -208,7 +173,6 @@ func _wire(root: Node) -> void:
 		f.set_script(fs)
 		_say("Foliage: scripted with foliage.gd")
 
-	# --- FX/Motes
 	var fx := root.get_node_or_null("FX")
 	if fx == null:
 		fx = Node3D.new()
@@ -229,7 +193,6 @@ func _wire(root: Node) -> void:
 	else:
 		_say("!! %s did not save" % MOTES_SCENE)
 
-	# --- FX/Drips
 	var d := fx.get_node_or_null("Drips")
 	if d == null:
 		d = Node3D.new()
@@ -243,10 +206,6 @@ func _wire(root: Node) -> void:
 		d.set_script(ds)
 		_say("FX/Drips: scripted with drips.gd")
 
-
-# -----------------------------------------------------------------------------
-# helpers
-# -----------------------------------------------------------------------------
 
 func _save_scene(root: Node, path: String, label: String) -> void:
 	var ps := PackedScene.new()
