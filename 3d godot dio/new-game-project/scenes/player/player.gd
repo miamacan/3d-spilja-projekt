@@ -1,56 +1,52 @@
 extends CharacterBody3D
 
-## First-person walker for the limestone cave blockout (G1).
-##
-## Capsule 1.8 m / r 0.4, eye at 1.65 m, 75 deg FOV.
-## Yaw on the body, pitch on Head. Spawns at MARK_PlayerSpawn inside the
-## imported cave_env.glb and takes its facing from the marker's -Z.
-##
-## The route auditor (scenes/debug/route_audit.gd) drives this same body by
-## setting `auto_control` and `auto_wish_dir`, so the audit measures the real
-## capsule against the real colliders, not a raycast approximation.
+# Kontroler igrača u prvom licu za scenu špilje.
+# Kapsula 1.8 m / r 0.4, oči na 1.65 m, FOV 75 stupnjeva.
+# Yaw (lijevo-desno) ide na cijelo tijelo, pitch (gore-dolje) samo na Head.
+# Igrač se stvara na markeru MARK_PlayerSpawn iz uvezenog cave_env.glb.
+#
+# route_audit.gd koristi isti ovaj skript (preko auto_control/auto_wish_dir)
+# da automatski testira prohodnost - koristi pravu fiziku, ne raycast.
 
 const SETTING_SENSITIVITY := "player/mouse_sensitivity"
 const SETTING_INVERT_Y := "player/invert_y"
 
 @export_group("Movement")
-## Metres per second on flat ground.
+# brzina hoda (m/s)
 @export var walk_speed := 4.0
 @export var sprint_speed := 6.5
-## Higher = snappier. Units are m/s per second.
+# ubrzanje/zaustavljanje - veći broj = brži odziv
 @export var ground_accel := 14.0
 @export var ground_decel := 18.0
 @export var air_accel := 3.0
 @export var jump_enabled := true
-## Apex height in metres. Converted to an impulse against project gravity.
+# visina skoka u metrima
 @export var jump_height := 0.9
 
 @export_group("Look")
-## Radians of rotation per pixel of mouse movement. Overridden at runtime by
-## the project setting `player/mouse_sensitivity` when that exists.
+# osjetljivost miša (radijani po pikselu)
 @export var mouse_sensitivity := 0.0022
 @export_range(1.0, 89.0, 0.5) var pitch_limit_deg := 89.0
 @export var invert_y := false
 
 @export_group("Head bob")
 @export var bob_enabled := true
-## Vertical travel of the eye, in metres. The brief asks for 2 cm.
+# koliko se oči pomiču gore-dolje pri hodu (metri)
 @export var bob_amplitude := 0.02
-## Bob cycles per metre walked. One cycle = two footfalls.
+# koliko "kimanja" po metru hoda
 @export var bob_cycles_per_metre := 0.55
 
 @export_group("Spawn")
 @export var spawn_marker := "MARK_PlayerSpawn"
-## Lift above the marker so the capsule never starts embedded in the floor.
+# malo podigni iznad markera da igrač ne "upadne" u pod
 @export var spawn_lift := 0.1
 @export var use_marker_facing := true
-## Used only when the marker cannot be found. Blender (-3, -29, 5.517).
+# koristi se samo ako marker nije pronađen
 @export var fallback_spawn := Vector3(-3.0, 5.6, 29.0)
 
 @export_group("Throwing")
-## G4. Charge by holding `throw`, release to throw. Hold time is clamped into
-## [charge_min, charge_max] and mapped onto [speed_min, speed_max], so a quick
-## tap still throws -- it just throws softly.
+# nabijanje bacanja: drži tipku, otpusti za bacanje; vrijeme drž. mapira se
+# u brzinu bacanja (kratki klik = slabo, dugo drži = jako)
 @export var throw_enabled := true
 @export var rock_scene_path := "res://scenes/rock/Rock.tscn"
 @export var charge_min := 0.3
@@ -66,17 +62,16 @@ const SETTING_INVERT_Y := "player/invert_y"
 @export var viewmodel_enabled := true
 @export var viewmodel_mesh_path := "res://scenes/rock/rock_mesh_1.res"
 @export var viewmodel_material_path := "res://scenes/rock/M_RockViewmodel.tres"
-## Camera-local. Bottom-right, close enough to read, far enough not to clip the
-## near plane at 0.05.
+# pozicija kamena u ruci (relativno na kameru)
 @export var viewmodel_rest := Vector3(0.30, -0.24, -0.62)
 @export var viewmodel_scale := 0.85
 
 @export_group("Debug")
 @export var hud_visible := true
 
-# --- scripted control, used by the route auditor -----------------------------
+# skriptirano upravljanje, koristi ga route_audit.gd
 var auto_control := false
-var auto_wish_dir := Vector3.ZERO  # world space, horizontal, normalised
+var auto_wish_dir := Vector3.ZERO
 var auto_sprint := false
 
 var _pitch := 0.0
@@ -118,16 +113,13 @@ func _ready() -> void:
 	teleport_to_spawn.call_deferred()
 
 
-# -----------------------------------------------------------------------------
-# Spawn
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------- SPAWN -----
 
 func find_spawn_marker() -> Node3D:
 	var root: Node = get_tree().current_scene
 	if root == null:
 		root = get_tree().root
-	# owned = false: the markers come in as children of the .glb instance and
-	# are not owned by the current scene's root.
+	# marker dolazi iz .glb datoteke, pa nije "u vlasništvu" scene - traži ga posebno
 	return root.find_child(spawn_marker, true, false) as Node3D
 
 
@@ -155,9 +147,7 @@ func teleport_to(world_pos: Vector3) -> void:
 	head.position.y = _head_rest_y
 
 
-# -----------------------------------------------------------------------------
-# Input
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------- INPUT -----
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -219,9 +209,7 @@ func _wish_dir() -> Vector3:
 	return dir.normalized() if dir.length_squared() > 0.000001 else Vector3.ZERO
 
 
-# -----------------------------------------------------------------------------
-# Movement
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------- MOVEMENT -----
 
 func _physics_process(delta: float) -> void:
 	var g := get_gravity()
@@ -260,9 +248,7 @@ func _update_bob(delta: float) -> void:
 	head.position.y = _head_rest_y + sin(_bob_phase) * bob_amplitude * _bob_weight
 
 
-# -----------------------------------------------------------------------------
-# HUD
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------ HUD -----
 
 func _update_hud() -> void:
 	if not _hud.visible:
@@ -284,9 +270,7 @@ func _update_hud() -> void:
 		]
 
 
-# -----------------------------------------------------------------------------
-# Throwing (G4)
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------- THROWING -----
 
 func _begin_charge() -> void:
 	if _cooldown > 0.0 or _rock_scene == null:
@@ -305,9 +289,7 @@ func _release_charge() -> void:
 	_spawn_rock(speed)
 
 
-## Hold time -> launch speed. Clamped at both ends: under charge_min a tap still
-## throws at speed_min rather than dribbling out at zero, and over charge_max
-## holding longer gains nothing.
+# vrijeme drž. tipke -> brzina bacanja (kratki klik = min. brzina, ne nula)
 func _charge_speed() -> float:
 	var t := clampf(_charge, charge_min, charge_max)
 	var f := (t - charge_min) / maxf(charge_max - charge_min, 0.001)
@@ -342,7 +324,7 @@ func _spawn_rock(speed: float) -> void:
 	host.add_child(rb)
 	var fwd := -camera.global_transform.basis.z
 	rb.global_position = camera.global_position + fwd * spawn_ahead
-	# impulse = mass * delta-v, so this lands the rock at exactly `speed`
+	# impuls = masa * brzina, tako kamen dobije točno tu brzinu
 	rb.apply_central_impulse(fwd * speed * rb.mass)
 	rb.angular_velocity = Vector3(
 		randf_range(-9.0, 9.0), randf_range(-9.0, 9.0), randf_range(-9.0, 9.0))
@@ -351,9 +333,7 @@ func _spawn_rock(speed: float) -> void:
 	_prune_rocks()
 
 
-## Keeps the live count bounded. water.gd frees rocks that sink and rock.gd
-## frees itself after rock_ttl, but a rock wedged in a crevice would otherwise
-## sit there until then -- and the cap is what keeps spamming cheap.
+# briše viška kamenja iznad limita (i staro kamenje koje negdje zapne)
 func _prune_rocks() -> void:
 	var keep: Array[Node] = []
 	for r in _rocks:
@@ -366,9 +346,7 @@ func _prune_rocks() -> void:
 			old.queue_free()
 
 
-# -----------------------------------------------------------------------------
-# Viewmodel
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------- VIEWMODEL -----
 
 func _build_viewmodel() -> void:
 	if not viewmodel_enabled or camera == null:
@@ -393,7 +371,7 @@ func _build_viewmodel() -> void:
 func _update_viewmodel(delta: float) -> void:
 	if _viewmodel == null:
 		return
-	# "disappears on release": hidden for the cooldown, back when ready again.
+	# kamen u ruci se sakrije za vrijeme cooldowna, vrati se kad je opet spreman
 	_viewmodel.visible = _cooldown <= 0.0
 	var target := get_charge_ratio() if _charging else 0.0
 	_vm_lift = move_toward(_vm_lift, target, delta * 5.0)
