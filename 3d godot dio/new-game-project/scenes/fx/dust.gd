@@ -1,7 +1,6 @@
 extends Node3D
-##
-## G4 — a tiny dust puff where a stone struck stone. One-shot, frees itself.
-##
+# G4 - mali oblačić prašine gdje se kamen udario o kamen. Odigra se jednom
+# i sam se obriše.
 
 @export var extra_life := 0.25
 
@@ -11,6 +10,7 @@ var _life := 1.0
 @onready var _p: GPUParticles3D = get_node_or_null("Particles")
 
 
+# poziva se prije _ready() da postavi veličinu efekta (ovisno o jačini udarca)
 func configure(scale_factor: float) -> void:
 	set_meta("puff_scale", clampf(scale_factor, 0.2, 2.0))
 
@@ -33,6 +33,7 @@ func _ready() -> void:
 		_life = extra_life
 
 
+# nakon što efekt istekne, obriši ovaj čvor
 func _process(delta: float) -> void:
 	_t += delta
 	if _t >= _life:
