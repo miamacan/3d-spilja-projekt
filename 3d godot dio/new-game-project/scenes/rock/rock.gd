@@ -1,15 +1,11 @@
 extends RigidBody3D
-##
-## G4 — a thrown stone.
-##
-## Owns its own impact response (stone click + dust puff) and its own lifetime.
-## The player only throws it; everything after release is here, so the same
-## scene behaves identically however it gets into the world -- thrown, dropped
-## by a test harness, or knocked loose by another rock.
-##
-## Water is NOT handled here: scenes/water/water.gd detects entry through its
-## Area3D and takes over damping, sinking and freeing.
-##
+# Bačeni kamen (G4).
+# Sam se brine o udarcu (zvuk klika + prašina) i o svom vremenu trajanja.
+# Igrač ga samo baci - sve poslije toga (udarac, prašina, brisanje) je ovdje,
+# svejedno je li kamen bačen, pušten u testu, ili gurnut drugim kamenom.
+#
+# Voda se NE rješava ovdje - water.gd (preko svog Area3D) preuzme kamen
+# čim uđe u vodu (usporavanje, tonjenje, brisanje).
 
 const DUST_SCENE := "res://scenes/fx/Dust.tscn"
 const CLICKS: Array[String] = [
@@ -24,23 +20,20 @@ const MESHES: Array[String] = [
 ]
 
 @export var lifetime := 20.0
-## Below this the impact is a nudge, not a knock. Without it a rock settling on
-## a slope clicks every physics frame as it micro-bounces.
+# ispod ove brzine udarac se ignorira (inače kamen "klika" svaki frame dok se smiruje)
 @export var min_click_speed := 1.6
-## Minimum seconds between this rock's own clicks. A bounce can report several
-## contacts in consecutive frames.
+# najmanji razmak (u sekundama) između dva klika istog kamena
 @export var click_cooldown := 0.09
 @export var min_dust_speed := 3.5
 @export var max_dust_puffs := 3
-## No clicking off the pool bed once submerged -- water.gd owns that.
+# ispod vode se ne klika - to rješava water.gd
 @export var water_level := 0.0
 
 var _age := 0.0
 var _since_click := 99.0
 var _puffs := 0
-## Speed as of the last physics step. body_entered fires after the solver has
-## already killed the velocity, so reading linear_velocity inside it reports a
-## near-stationary rock and every impact comes out silent.
+# brzina iz zadnjeg fizikalnog koraka - u trenutku samog sudara (body_entered)
+# brzina je već "ugušena" na skoro nulu, pa se čita malo prije toga
 var _prev_speed := 0.0
 
 @onready var _audio: AudioStreamPlayer3D = get_node_or_null("Audio")
@@ -54,7 +47,7 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 
 
-## One scene, three shapes. Rocks that are all identical read as manufactured.
+# nasumično odabere jedan od tri oblika kamena, da ne izgledaju svi isto
 func _pick_variant() -> void:
 	if _mesh == null:
 		return
@@ -62,7 +55,7 @@ func _pick_variant() -> void:
 	var m: Mesh = ResourceLoader.load(MESHES[idx])
 	if m != null:
 		_mesh.mesh = m
-	# a little extra scale variety on top of the three shapes
+	# malo nasumične veličine, na vrh već postojeće 3 varijante oblika
 	var s := randf_range(0.85, 1.2)
 	_mesh.scale = Vector3(s, s, s)
 	rotation = Vector3(randf() * TAU, randf() * TAU, randf() * TAU)
@@ -101,8 +94,8 @@ func _click(speed: float) -> void:
 	if st == null:
 		return
 	_audio.stream = st
-	# Harder hits are louder and a touch brighter. The pitch spread also stops
-	# a run of bounces sounding like one sample retriggered.
+	# jači udarac = glasniji i malo "svjetliji" zvuk; raspon visine tona
+	# sprječava da se više udaraca zaredom čuje kao isti, repetitivni zvuk
 	var f := clampf(speed / 12.0, 0.0, 1.0)
 	_audio.volume_db = linear_to_db(clampf(0.25 + f * 0.75, 0.05, 1.0))
 	_audio.pitch_scale = randf_range(0.88, 1.14) * (0.95 + f * 0.2)
@@ -114,8 +107,8 @@ func _dust(speed: float) -> void:
 	if ps == null:
 		return
 	var d := ps.instantiate()
-	# Parent to the rock's PARENT, not the rock: the puff should stay where the
-	# impact happened while the rock bounces away from it.
+	# prašina se veže na roditelja kamena, ne na sam kamen - da ostane na
+	# mjestu udarca dok se kamen dalje kotrlja/odskakuje
 	var host := get_parent()
 	if host == null:
 		return
