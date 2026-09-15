@@ -1,14 +1,12 @@
 extends Node3D
-##
-## G5 — water dripping off the vine tips.
-##
-## Puts a thin falling-streak emitter at each MARK_Drip_* and, on a per-marker
-## random timer, pushes a ripple into the pool directly below it.
-##
-## The markers were re-seated in B4 onto real vine tips (Blender handoff §4),
-## and all fourteen vine tips were verified to sit over open water, so a ripple
-## at the marker's XZ lands in the pool rather than on rock.
-##
+# G5 - kapanje vode s krajeva loza.
+#
+# Na svaki MARK_Drip_* marker stavlja tanki efekt kapi koja pada, i s
+# nasumičnim tajmerom (po markeru) pušta val u jezero točno ispod te kapi.
+#
+# Markeri su u Blenderu postavljeni na stvarne krajeve loza, i svih 14
+# vrhova provjereno je da se nalazi iznad vode, pa val uvijek završi
+# u jezeru, ne na kamenu.
 
 const DRIP_SCENE := "res://scenes/fx/Drip.tscn"
 
@@ -17,8 +15,8 @@ const DRIP_SCENE := "res://scenes/fx/Drip.tscn"
 @export var water_level := 0.0
 @export var interval_min := 1.4
 @export var interval_max := 4.2
-## Ripples are pushed straight into the pool's 16-slot ring buffer. Too fast and
-## the drips alone would evict every rock ripple the player makes.
+# valovi idu u isti "ring buffer" od 16 mjesta kao i valovi od kamenja -
+# ako je ovo previsoko, kapanje bi samo istisnulo valove od bačenog kamena
 @export var max_ripples_per_second := 1.5
 
 var _markers: Array[Node3D] = []
