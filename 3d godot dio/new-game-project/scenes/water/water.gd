@@ -1,20 +1,11 @@
 @tool
 extends Node3D
-##
-## G3 — the pool: surface material, ripple bookkeeping, and what happens when a
-## rock hits it.
-##
-## Replaces water_placeholder.gd, which existed only to stop the pool rendering
-## as Godot's default WHITE (see HANDOFF_GODOT.md §4). The reason this is a
-## script on a scene node rather than a material saved into main.tscn is
-## unchanged and still important: WATER_Pool_Surface lives inside the instanced
-## cave_env.glb, and PackedScene.pack() only records an override there if the
-## node's owner is re-pointed at the outer scene -- which makes it serialise the
-## whole mesh inline, 105 KB of vertex arrays, forked away from the glb.
-##
-## @tool so the editor shows the water too, which is what lets the lightmap bake
-## see it. All gameplay is guarded behind Engine.is_editor_hint().
-##
+# Jezero (G3): materijal površine, širenje valova (ripple), i što se
+# dogodi kad kamen udari u vodu.
+#
+# @tool je ovdje da bi i editor (ne samo pokrenuta igra) vidio vodu - to
+# treba da lightmap bake ispravno "vidi" površinu vode. Sve što je vezano
+# za samu igru je zaštićeno provjerom Engine.is_editor_hint().
 
 const MAX_RIPPLES := 16
 const SHADER_PATH := "res://shaders/water.gdshader"
@@ -22,15 +13,12 @@ const NORMAL_A := "res://assets/textures/T_WaterNormal_A.png"
 const NORMAL_B := "res://assets/textures/T_WaterNormal_B.png"
 const SPLASH_SCENE := "res://scenes/fx/Splash.tscn"
 const SURFACE_NAME := "WATER_Pool_Surface"
-## Visual layers for the pool surface: bit 1 (normal rendering) + bit 2, which
-## exists only so Water.tscn's ReflectionProbe can target the water and nothing
-## else via its reflection_mask. Without that the probe re-lights every rock in
-## the chamber with its captured cubemap.
+# vizualni slojevi površine vode: bit 1 = normalno renderiranje, bit 2 = da
+# ReflectionProbe hvata samo vodu, ništa drugo u prostoriji
 const SURFACE_VISUAL_LAYERS := 1 | 2
 
 @export var rock_group: StringName = &"rock"
-## Below this impact speed a rock gets no splash and no sound -- a rock that
-## rolls gently off the beach should not sound like one thrown from the crest.
+# ispod ove brzine udarca nema pljuska ni zvuka
 @export var min_impact_speed := 0.8
 @export_group("Sinking")
 @export var sink_linear_damp := 6.0
@@ -43,8 +31,7 @@ var _surface: MeshInstance3D
 var _ripples := PackedVector4Array()
 var _slot := 0
 var _live := 0
-## Our own clock, handed to the shader every frame. See the comment on
-## `time_now` in water.gdshader for why this is not TIME.
+# vlastiti "sat" koji se svaki frame šalje shaderu vode
 var _clock := 0.0
 
 
@@ -68,9 +55,7 @@ func _process(delta: float) -> void:
 		_mat.set_shader_parameter("time_now", _clock)
 
 
-# -----------------------------------------------------------------------------
-# surface
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------- POVRŠINA -----
 
 func _bind_surface() -> void:
 	var p := get_parent()
@@ -114,14 +99,10 @@ func _find(n: Node, nm: String) -> Node:
 	return null
 
 
-# -----------------------------------------------------------------------------
-# ripples
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------ VALOVI -----
 
-## Push an expanding ring at a world position. The array is a ring buffer: once
-## all 16 slots are live the oldest is overwritten, which is what the brief
-## asks for and also means a player spamming rocks degrades gracefully instead
-## of dropping new ripples on the floor.
+# dodaje jedan šireći krug (val) na svjetskoj poziciji. Niz radi kao "ring
+# buffer" - kad su svih 16 mjesta puna, najstariji val se prepiše novim.
 func add_ripple(world_pos: Vector3) -> void:
 	if _mat == null:
 		return
@@ -132,9 +113,7 @@ func add_ripple(world_pos: Vector3) -> void:
 	_mat.set_shader_parameter("ripple_count", _live)
 
 
-# -----------------------------------------------------------------------------
-# impacts
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------- UDARCI -----
 
 func _on_body_entered(body: Node3D) -> void:
 	if not body.is_in_group(rock_group):
@@ -144,9 +123,8 @@ func _on_body_entered(body: Node3D) -> void:
 	if body is RigidBody3D:
 		speed = (body as RigidBody3D).linear_velocity.length()
 
-	# Put the impact ON the surface, not wherever the body happened to be when
-	# the area fired. The Area3D triggers as soon as the collision shapes touch,
-	# so a fast rock is already some way under by then.
+	# udarac se postavlja NA površinu vode, ne gdje god je tijelo trenutno -
+	# brz kamen je već malo ispod površine kad se Area3D okine
 	var hit := body.global_position
 	hit.y = global_position.y
 
@@ -159,11 +137,9 @@ func _on_body_entered(body: Node3D) -> void:
 		rb.linear_damp = sink_linear_damp
 		rb.angular_damp = sink_angular_damp
 		rb.gravity_scale = sink_gravity_scale
-		# Free it rather than leaving physics bodies accumulating on the pool
-		# bed for the rest of the session.
-		# Capture the instance ID, not the node. The player's live-rock cap can
-		# free this rock before the timer fires, and a lambda holding the freed
-		# object itself errors with "Lambda capture at index 0 was freed".
+		# obriši kamen nakon nekog vremena, da se ne gomilaju na dnu jezera.
+		# Čuva se ID instance, ne sam čvor - jer igrač može ranije obrisati
+		# taj isti kamen (limit broja kamenja), pa bi lambda inače pucala.
 		var rid := rb.get_instance_id()
 		var t := get_tree().create_timer(rock_lifetime)
 		t.timeout.connect(func():
