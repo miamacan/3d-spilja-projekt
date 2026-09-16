@@ -149,26 +149,6 @@ Detaljno tehničko obrazloženje svake odluke (i alternative koje su
 isprobane i odbačene) nalazi se u pratećem dokumentu *"Scena špilje - tehnički
 pregled komponenti"* i u seminarskom radu.
 
-## Što je gotovo, po fazama
-
-**Blender (B0-B7):** blockout, high/low-poly ljuska, vegetacija (loze, paprati),
-UV i vertex-boja maska mahovine, materijali kao image teksture (tiling set za
-stijenu i mahovinu + unique "macro" bake po komadu geometrije za slojevitost i
-mrlje od vode), finalni izvoz `cave_env.glb`.
-
-**Godot (G1-G5):**
-
-| Faza | Sadržaj |
-|---|---|
-| G1 | Igrač, kretanje, kamera, spawn na markeru, automatski test prohodnosti |
-| G2 | Osvjetljenje, magla, `WorldEnvironment` (AgX, SSAO/SSIL, volumetrijska magla) |
-| G3 | Voda - shader, pljuskovi, valovi |
-| G4 | Bacanje kamenja - nabijanje, RigidBody3D, viewmodel, zvuk udarca |
-| G5 | Shader mahovine, atlas lišća, prašina u snopu svjetla, kapi s loza |
-
-`route_audit.txt` sadrži izvještaj automatiziranog testa koji provjerava da
-je cijela špilja doista prohodna capsule-kolajderom igrača.
-
 ## Poznata ograničenja
 
 Iskreno, nekoliko stvari je ostalo nedovršeno ili je svjesno odgođeno:
@@ -201,8 +181,6 @@ GDScript i Python skripti (npr. shaderi, generiranje geometrije/tekstura,
 kontroler igrača) te pri organizaciji i formuliranju pratećih tekstova
 (seminarski rad, ova dokumentacija). Sve finalne odluke o izgledu i
 funkcionalnosti scene donesene su i provjerene od strane autora.
-
-## Licenca
 
 ## Licenca
 
