@@ -18,7 +18,6 @@ https://www.youtube.com/watch?v=QqsZlZt_3xM
 - [Kako pokrenuti](#kako-pokrenuti)
 - [Kontrole](#kontrole)
 - [Tijek rada (pipeline)](#tijek-rada-pipeline)
-- [Što je gotovo, po fazama](#što-je-gotovo-po-fazama)
 - [Poznata ograničenja](#poznata-ograničenja)
 - [Korištenje AI alata](#korištenje-ai-alata)
 - [Licenca](#licenca)
