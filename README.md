@@ -1,6 +1,7 @@
 # Interaktivna 3D scena špilje - Blender + Godot 4
 
-Seminarski projekt iz kolegija **3D računalna grafika**, FPMOI Osijek.
+Seminarski projekt iz kolegija **3D računalna grafika**, 
+Fakultet primjenjene matematike i informatike Osijek.
 Krečnjačka špilja s jezerom kroz koju se hoda u prvom licu, u stvarnom vremenu -
 umjesto jednog gotovog, izrenderiranog kadra.
 https://www.youtube.com/watch?v=QqsZlZt_3xM
